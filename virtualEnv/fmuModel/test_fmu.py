@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-The envelope, battery and PV are modelled through respective FMU
-The Chiller and boiler is simplified with constant COP to convert load to electricity consumption
+Test the FMU using the rule based control.
 
 The results are stored in pandas dataframe
 
@@ -158,5 +157,5 @@ def FMU_simulate(eplus_path, sim_days=365, with_plots=True, save_res=True):
 
 if __name__ == '__main__':
     envelope_path = 'fmuModel/v1_fmu.fmu'
-    sim_days = 10  # number of simulation days
-    FMU_simulate(envelope_path, sim_days, with_plots=True, save_res=True)
+    sim_days = 2  # number of simulation days
+    FMU_simulate(envelope_path, sim_days, with_plots=False, save_res=True)

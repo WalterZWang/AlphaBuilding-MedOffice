@@ -4,10 +4,15 @@ This is the official repository of AlphaBuilding MedOffice: a realistic OpenAI G
 ## Structure
 
 ``analysis``: code to analyze the result
+
 ``docker``: scripts to develop the docker image
+
 ``lib``: DRL models and utility functions
+
 ``log``: log files for TensorBoard visualization
+
 ``RL``: scripts for DRL
+
 ``virtualEnv``: scripts to develop the virtual simulation environment
 
 ## Test

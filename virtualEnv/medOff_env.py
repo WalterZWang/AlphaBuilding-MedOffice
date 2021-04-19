@@ -26,7 +26,7 @@ class MedOffEnv(Env):
     def __init__(self,
                  building_path=None,
                  sim_days=None,
-                 step_size=None,
+                 step_size=None,  # unit: [s]
                  sim_year=None,
                  tz_name=None,
                  eprice_path=None):
@@ -47,9 +47,9 @@ class MedOffEnv(Env):
                                     self.step_size)
         self.n_steps = len(self.time_steps)
         self.sim_year = sim_year
-        self.time_interval = pd.date_range(start='1/1/{0}'.format(sim_year),
-                                           end='1/1/{0}'.format(sim_year+1),
-                                           periods=35040+1)  # 35040 is for 15 min interval
+        self.time_index = pd.date_range(start='1/1/{0}'.format(self.sim_year), 
+                                        periods=len(self.time_steps)+1,
+                                        freq='{}T'.format(self.step_size//60))
 
         # flag: initialize or reset, -1 means initialize
         self.episode_idx = -1
@@ -84,16 +84,15 @@ class MedOffEnv(Env):
         self.states_temp = ['conf1Temp', 'conf2Temp', 'enOff1Temp', 'enOff2Temp', 'enOff3Temp',
                             'opOff1Temp', 'opOff2Temp', 'opOff3Temp', 'opOff4Temp']
         self.states_energy = ['fanEnergy', 'coolEnergy', 'heatEnergy']
-        self.states_occ = ['occ']
 
         # self.obs_names: interface with fmu, get obs from fmu
         self.obs_names = self.states_amb + self.states_temp + self.states_energy
         # self.observation_space: interface with controller agent (act & crt network)
-        # include: states_amb, states_temp, states_occ
+        # include: states_amb, states_temp
         # energy is not a state but a reward
-        self.observation_space = spaces.Box(low=np.array([-30.0,     0.0,   0.0,  5.0,  5.0,  5.0,  5.0,  5.0,  5.0,  5.0,  5.0,  5.0, 0.0]),
+        self.observation_space = spaces.Box(low=np.array([-30.0,     0.0,   0.0,  5.0,  5.0,  5.0,  5.0,  5.0,  5.0,  5.0,  5.0,  5.0]),
                                             high=np.array(
-                                                [50.0, 1500.0, 100.0, 35.0, 35.0, 35.0, 35.0, 35.0, 35.0, 35.0, 35.0, 35.0, 1.0]),
+                                                [50.0, 1500.0, 100.0, 35.0, 35.0, 35.0, 35.0, 35.0, 35.0, 35.0, 35.0, 35.0]),
                                             dtype=np.float32)
 
     def reset(self):
@@ -126,11 +125,10 @@ class MedOffEnv(Env):
             # extract the observations
             obs_all_raw = np.concatenate(self.building_model.get(self.obs_names))
             state_raw = obs_all_raw[:-3]   # exclude energy
-            occupancy = occupancy_state(self.time_step_idx)
-            state_raw = np.append(state_raw,[occupancy])
 
             # calculate the rewards from the observation, reheat of the current time step is in action_raw
-            reward, energy, comfort, temp_min, temp_max, uncDegHour = self._compute_reward(obs_all_raw, occupancy, action_raw, 22)
+            time_current = self.time_index[self.time_step_idx]
+            reward, energy, comfort, temp_min, temp_max, uncDegHour = self._compute_reward(obs_all_raw, time_current, action_raw, 22)
 
             if self.time_step_idx < (self.n_steps - 1):
                 done = False
@@ -184,20 +182,17 @@ class MedOffEnv(Env):
         return actions_scaled
 
 
-    def _compute_reward(self, obs, officeHour, act, T_set, comfort_tol = 2,\
-        occupancy=[1, 1, 1, 1, 1, 1, 1, 1, 1], tau=[0.2, 0.002]):
+    def _compute_reward(self, obs, time, act, T_set, comfort_tol = 2, tau=[0.2, 0.002]):
         '''
         Similar function to the compute_reward method in analysis/utils.py
         Difference is: 1. one more output - energy
                        2. T_set is a number rather than an array
         Input
         obs: numpy array, obs from the environment, raw value
-        officeHour: int, 1 for officeHour, 0 for non-officeHour
+        time: current time, pandas timestamp, support attribute h, and method weekday()
         act: action of previous time step, raw value
         T_set: float, temperature setpoint for each thermal zone
-        officeHour: binary, whether it is office hour or not
         comfort_tol: float, comfort tolerance, used to calculate the uncomfortable degree hour
-        occupancy: list of binary, occupancy of each zone
         tau: weights of comfort over energy, higher weights of comfort during office hour
 
         Output
@@ -206,36 +201,33 @@ class MedOffEnv(Env):
         zone_temp_max: maximum zone temperature of the 9 zones at the time step
         uncDegHour: uncomfortable degree hours
         '''
-        # comfort cost
-        zones_temp = obs[3:12]
-        # comfort cost is 0 if space is non-occupied
-        cost_comfort_t = sum(np.multiply(
-            (zones_temp-T_set), np.array(occupancy))**2)
-        zone_temp_min = min(zones_temp)
-        zone_temp_max = max(zones_temp)
-
         # energy cost
         ahu_energy = (obs[12] + obs[13] + obs[14])/3600000    # unit:kWh
         reheat_energy = (act[2] + act[4] + act[6] + act[8] + act[10] +\
             act[12] + act[14] + act[16] + act[18])/(1000*4)   # unit:kWh, W->kW, 15min per timestep, -> h
         cost_energy = ahu_energy + reheat_energy
 
+
+        # comfort cost
+        zones_temp = obs[3:12]
         # the comfort/energy weight is determined on time
-        time_t = self.time_interval[self.time_step_idx]
+        officeHour = (time.weekday()<5) & (time.hour<18) & (time.hour>8)
         if officeHour:
-            tau_cost = tau[0]
+            tau_comfort = tau[0]
             tau_udh = 1
         else:
-            tau_cost = tau[1]
-            zone_temp_min = T_set
-            zone_temp_max = T_set
+            tau_comfort = tau[1]
             tau_udh = 0
+        # comfort cost is 0 if space is non-occupied
+        cost_comfort_t = sum((zones_temp-T_set)**2)
+        zone_temp_min = min(zones_temp)
+        zone_temp_max = max(zones_temp)
 
-        heaDegHour = sum(np.maximum(zones_temp-(T_set+2),np.zeros(9)))
-        cooDegHour = sum(np.maximum((T_set-2)-zones_temp,np.zeros(9)))
+        heaDegHour = sum(np.maximum(zones_temp-(T_set+comfort_tol), np.zeros(9)))
+        cooDegHour = sum(np.maximum((T_set-comfort_tol)-zones_temp, np.zeros(9)))
         uncDegHour = (heaDegHour+cooDegHour) * tau_udh
 
-        cost_comfort = tau_cost * cost_comfort_t
+        cost_comfort = tau_comfort * cost_comfort_t
 
         reward_t = -1.0 * (cost_energy + cost_comfort)
 
@@ -243,8 +235,8 @@ class MedOffEnv(Env):
         print("Comfort cost: {0}".format(cost_comfort))
         print("Total reward: {0}".format(reward_t))
         print("Uncomfort degree hour: {0}".format(uncDegHour))
-        #print("Zone temperature range (degC): {0} ~ {1}".format(
-        #    zone_temp_min, zone_temp_max))
+        print("Zone temperature range (degC): {0} ~ {1}".format(
+              zone_temp_min, zone_temp_max))
 
         return reward_t, cost_energy, cost_comfort, zone_temp_min, zone_temp_max, uncDegHour
 
@@ -266,22 +258,6 @@ def time_converter(year, idx, total_timestep=35040):
     time = index[idx]
     return time
 
-def occupancy_state(idx,file='imitationLearn/dataForIL/Standard_3C_SF_TMY3_1.npz'):
-    """
-    Input
-    -------------------
-    idx: int, timestep index in the specific year, SHOULD start from zero
-    file: the npz file, as the reference to determine whether it is occupied or not
-
-    Output
-    -------------------
-    occupied: 1 for occupied
-    """
-    dict_data = np.load(file)
-    reference = dict_data['arr_0']
-    occupied = reference[idx,6]
-
-    return occupied
 
 def get_price_data_from_csv(eprice_path, start_time=None, end_time=None):
     '''Get a DataFrame of all price variables from csv files
@@ -353,7 +329,7 @@ class ExperienceBuffer:
             action_df_0, ignore_index=True)
 
         obs_dict = dict()
-        for i in range(len(self.obs_names)):
+        for i in range(len(self.obs_names)-3):   # obs does not contain energy consumption data
             obs_i = self.obs_names[i]
             obs_dict[obs_i] = [obs[i]]
         obs_df_0 = pd.DataFrame(obs_dict)

@@ -58,7 +58,7 @@ def test_agent(obs):
         terminal_reheat = reheat(control_ahuSAT, terminal_t, terminal_fr)
         control.append(terminal_fr)
         control.append(terminal_reheat)
-    return control
+    return np.array(control)
 
 
 def gym_simulate(eplus_path, sim_days=365):
@@ -79,13 +79,13 @@ def gym_simulate(eplus_path, sim_days=365):
 
     for ep in range(2):
         state = env.reset()
-        for i in range(env.n_steps-1):
+        for _ in range(env.n_steps-1):
             action = test_agent(state)
             new_state, reward, done, _ = env.step(action)
             buffer.append(action, state, reward)
             state = new_state
             if done:
-                actions_data = buffer.action_data()
+                # actions_data = buffer.action_data()
                 obs_data = buffer.obs_data()
                 obs_data.to_csv('result_ep{0}.csv'.format(ep))
 
