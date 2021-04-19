@@ -1,0 +1,16 @@
+TestRunRes/
+*audit
+*.bnd
+*.eio
+*.epJSONout
+*.err
+*.eso
+*.mdd
+*sz.csv
+*.mtd
+*.mtr
+*.rdd
+*.shd
+*.sql
+*.svg
+*.csv
