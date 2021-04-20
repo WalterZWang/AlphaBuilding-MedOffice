@@ -27,8 +27,8 @@ class MedOffEnv(Env):
                  building_path=None,
                  sim_days=None,
                  step_size=None,  # unit: [s]
-                 sim_year=None,
-                 tz_name=None,
+                 sim_year=2015,
+                 tz_name='America/Los_Angeles',
                  eprice_path=None):
 
         # load fmu models
