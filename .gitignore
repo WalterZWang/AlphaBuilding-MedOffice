@@ -6,6 +6,12 @@ __pycache__/
 # C extensions
 *.so
 
+# FMU simulation files 
+Output_EPExport_Slave
+
+# TensorBoard visualization
+runs
+
 # Distribution / packaging
 .Python
 build/

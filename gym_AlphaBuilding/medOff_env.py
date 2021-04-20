@@ -83,7 +83,7 @@ class MedOffEnv(Env):
         self.states_amb = ['outTemp', 'outSolar', 'outRH']
         self.states_temp = ['conf1Temp', 'conf2Temp', 'enOff1Temp', 'enOff2Temp', 'enOff3Temp',
                             'opOff1Temp', 'opOff2Temp', 'opOff3Temp', 'opOff4Temp']
-        self.states_energy = ['fanEnergy', 'coolEnergy', 'heatEnergy']
+        self.states_energy = ['fanEnergy', 'coolEnergy', 'heatEnergy']   # designed for interacting with the FMU
 
         # self.obs_names: interface with fmu, get obs from fmu
         self.obs_names = self.states_amb + self.states_temp + self.states_energy
