@@ -84,7 +84,8 @@ A list of methods provided by the environment is as follows:
 | One step simulation      | ``obs,r,d,c=env.step(acts)``            | Control actions| New observations, reward, done flag, comments |
 | Scale states to [-1,1]   | ``s_scaled = env.scale_state(s_raw)``   | Raw states     | Scaled states                                 |
 | Scale actions to [-1,1]  | ``a_scaled = env.scale_action(a_raw)``  | Raw actions    | Scaled actions                                |
-| Rescale states to raw    | ``s_raw = env.rescale_state(s_scaled)`` | Scaled states  | Raw states                                    || Rescale actions to raw   | ``a_raw = env.rescale_action(a_scaled)``| Scaled actions | Raw actions                                   |
+| Rescale states to raw    | ``s_raw = env.rescale_state(s_scaled)`` | Scaled states  | Raw states                                    |
+| Rescale actions to raw   | ``a_raw = env.rescale_action(a_scaled)``| Scaled actions | Raw actions                                   |
 
 
 # Application
