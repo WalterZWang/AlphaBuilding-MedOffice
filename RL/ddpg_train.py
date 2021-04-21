@@ -72,13 +72,15 @@ if __name__ == "__main__":
     if not os.path.exists(save_path):
         os.makedirs(save_path)
 
-    env = medOff_env.MedOffEnv(building_path = 'virtualEnv/fmuModel/v1_fmu.fmu',
+    writer = SummaryWriter(comment="-ddpg_" + RunName)
+
+    env = medOff_env.MedOffEnv(building_path = 'gym_AlphaBuilding/fmuModel/v1_fmu.fmu',
                                     sim_days = 365,
                                     step_size = 900,
                                     sim_year = 2015,
                                     tz_name = 'America/Los_Angeles')
 
-    test_env = medOff_env.MedOffEnv(building_path = 'virtualEnv/fmuModel/v1_fmu.fmu',
+    test_env = medOff_env.MedOffEnv(building_path = 'gym_AlphaBuilding/fmuModel/v1_fmu.fmu',
                                     sim_days = 365,
                                     step_size = 900,
                                     sim_year = 2015,
@@ -91,12 +93,17 @@ if __name__ == "__main__":
     tgt_act_net = utils.TargetNet(act_net)
     tgt_crt_net = utils.TargetNet(crt_net)
 
-    writer = SummaryWriter(comment="-ddpg_" + RunName)
-    agent = models.AgentDDPG(act_net, device=device)
-    exp_source = utils.ExperienceSourceFirstLast(env, agent, gamma=GAMMA, steps_count=1)
-    buffer = utils.ExperienceReplayBuffer(exp_source, buffer_size=REPLAY_SIZE)
+    # initiate optimizer for the act and crt network and the agent
     act_opt = optim.Adam(act_net.parameters(), lr=LR_act)
     crt_opt = optim.Adam(crt_net.parameters(), lr=LR_crt)
+    act_lr_sch = optim.lr_scheduler.ExponentialLR(act_opt, BETA)
+    crt_lr_sch = optim.lr_scheduler.ExponentialLR(crt_opt, BETA)
+    agent = models.AgentDDPG(act_net, device=device)
+
+
+    exp_source = utils.ExperienceSourceFirstLast(env, agent, gamma=GAMMA, steps_count=1)
+    buffer = utils.ExperienceReplayBuffer(exp_source, buffer_size=REPLAY_SIZE)
+
 
     exp_idx = 0
     best_reward = None
@@ -120,10 +127,12 @@ if __name__ == "__main__":
                 exp_idx += 1
 
                 batch = buffer.sample(BATCH_SIZE)
-                states_v, actions_v, rewards_v, dones_mask, last_states_v = utils.unpack_batch_ddqn(batch, device)
+                states_v, actions_v, rewards_v, dones_mask, last_states_v = utils.unpack_batch_ddqn(batch)
 
                 # train critic
                 crt_opt.zero_grad()
+                print(type(states_v))
+                print(actions_v)
                 q_v = crt_net(states_v, actions_v)
                 last_act_v = tgt_act_net.target_model(last_states_v)
                 q_last_v = tgt_crt_net.target_model(last_states_v, last_act_v)

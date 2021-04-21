@@ -12,6 +12,9 @@ Output_EPExport_Slave
 # TensorBoard visualization
 runs
 
+# Results log
+log
+
 # Distribution / packaging
 .Python
 build/
