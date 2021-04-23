@@ -1,6 +1,6 @@
 import numpy as np
 
-import torch
+import torch as T
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -12,43 +12,42 @@ HID_SIZE = 128
 
 
 class DDPGActor(nn.Module):
-    def __init__(self, obs_size, act_size):
+    def __init__(self, obs_size, act_size, fc1_dims, fc2_dims):
         super(DDPGActor, self).__init__()
 
         self.net = nn.Sequential(
-            nn.Linear(obs_size, 64),
+            nn.Linear(obs_size, fc1_dims),
+            nn.LayerNorm(fc1_dims),
             nn.ReLU(),
-            nn.Linear(64, 128),
+            nn.Linear(fc1_dims, fc2_dims),
+            nn.LayerNorm(fc2_dims),
             nn.ReLU(),
-            nn.Linear(128, 64),
-            nn.ReLU(),
-            nn.Linear(64, act_size)
+            nn.Linear(fc2_dims, act_size)
         )
 
     def forward(self, x):
-        return self.net(x)
+        return T.tanh(self.net(x))
 
 class DDPGCritic(nn.Module):
-    def __init__(self, obs_size, act_size):
+    def __init__(self, obs_size, act_size, fc1_dims, fc2_dims):
         super(DDPGCritic, self).__init__()
 
         self.obs_net = nn.Sequential(
-            nn.BatchNorm1d(num_features=obs_size),
-            nn.Linear(obs_size, 256),
+            nn.Linear(obs_size, fc1_dims),
+            nn.LayerNorm(fc1_dims),
             nn.ReLU(),
         )
 
         self.out_net = nn.Sequential(
-            nn.BatchNorm1d(num_features=256 + act_size),
-            nn.Linear(256 + act_size, 128),
-            nn.BatchNorm1d(num_features=128),
+            nn.Linear(fc1_dims + act_size, fc2_dims),
+            nn.LayerNorm(fc2_dims),
             nn.ReLU(),
-            nn.Linear(128, 1)
+            nn.Linear(fc2_dims, 1)
         )
 
     def forward(self, x, a):
         obs = self.obs_net(x)
-        return self.out_net(torch.cat([obs, a], dim=1))
+        return self.out_net(T.cat([obs, a], dim=1))
 
 
 class D4PGCritic(nn.Module):
@@ -68,11 +67,11 @@ class D4PGCritic(nn.Module):
 
         delta = (v_max - v_min) / (n_atoms - 1)
 
-        self.register_buffer("supports", torch.arange(v_min, v_max + delta, delta))
+        self.register_buffer("supports", T.arange(v_min, v_max + delta, delta))
 
     def forward(self, x, a):
         obs = self.obs_net(x)
-        return self.out_net(torch.cat([obs, a], dim=1))
+        return self.out_net(T.cat([obs, a], dim=1))
 
     def distr_to_q(self, distr):
         weights = F.softmax(distr, dim=1) * self.supports

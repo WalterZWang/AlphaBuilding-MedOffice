@@ -211,13 +211,17 @@ class MedOffEnv(Env):
         # comfort cost
         zones_temp = obs[3:12]
         # the comfort/energy weight is determined on time
-        officeHour = (time.weekday()<5) & (time.hour<18) & (time.hour>8)
-        if officeHour:
-            tau_comfort = tau[0]
-            tau_udh = 1
-        else:
-            tau_comfort = tau[1]
-            tau_udh = 0
+        # officeHour = (time.weekday()<5) & (time.hour<18) & (time.hour>8)
+        # if officeHour:
+        #     tau_comfort = tau[0]
+        #     tau_udh = 1
+        # else:
+        #     tau_comfort = tau[1]
+        #     tau_udh = 0
+        
+        tau_comfort = tau[0]
+        tau_udh = 1
+        
         # comfort cost is 0 if space is non-occupied
         cost_comfort_t = sum((zones_temp-T_set)**2)
         zone_temp_min = min(zones_temp)
