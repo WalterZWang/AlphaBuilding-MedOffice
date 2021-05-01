@@ -70,7 +70,6 @@ The first step is to initiate the environment. A list of input parameters to set
 | tz_name              | Thermal Time Constant, mean and std                                    | tuple    |'America/Los_Angeles' |
 | eprice_path          | Path to the utility price signal, not used for energy conservation     | str      |None              |
 
-
 Then at each time step, the environment consumes ``acts`` (determined by the controller), runs a single time step simulation, and returns ``states`` and ``comments``. The contents of ``acts``, ``states``, and ``comments`` are shown as follows:
 
 <img src="docs/fig/variables.png" width="1000" />
@@ -81,12 +80,13 @@ A list of methods provided by the environment is as follows:
 |--------------------------|-----------------------------------------|----------------|-----------------------------------------------|
 | Initiate the env         | ``env=AlphaResEnv(*args)``              | Env parameters | An environment instance                       |
 | Reset the env            | ``obs=env.reset()``                     | \              | Observations (Initial conditions)             |
-| One step simulation      | ``obs,r,d,c=env.step(acts)``            | Control actions| New observations, reward, done flag, comments |
+| One step simulation      | ``obs,r,d,c=env.step(a_scaled)``        | Control actions| New observations, reward, done flag, comments |
 | Scale states to [-1,1]   | ``s_scaled = env.scale_state(s_raw)``   | Raw states     | Scaled states                                 |
 | Scale actions to [-1,1]  | ``a_scaled = env.scale_action(a_raw)``  | Raw actions    | Scaled actions                                |
 | Rescale states to raw    | ``s_raw = env.rescale_state(s_scaled)`` | Scaled states  | Raw states                                    |
 | Rescale actions to raw   | ``a_raw = env.rescale_action(a_scaled)``| Scaled actions | Raw actions                                   |
 
+***The input of the step function needs to be scaled to [-1, 1].*** Users can use the env.rescale method to get the actual value
 
 # Application
 ``AlphaBuilding MedOffice`` can be used to train controllers for commercial buildings. As an example, we demonstrate four applications here:

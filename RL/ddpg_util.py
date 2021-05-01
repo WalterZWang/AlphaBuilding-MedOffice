@@ -35,7 +35,7 @@ class ReplayBuffer(object):
         self.new_state_memory = np.zeros((self.mem_size, input_shape))
         self.action_memory = np.zeros((self.mem_size, n_actions))
         self.reward_memory = np.zeros(self.mem_size)
-        self.terminal_memory = np.zeros(self.mem_size, dtype=np.float32)
+        self.terminal_memory = np.zeros(self.mem_size, dtype=np.bool)
 
     def store_transition(self, state, action, reward, state_, done):
         index = self.mem_cntr % self.mem_size
@@ -43,7 +43,7 @@ class ReplayBuffer(object):
         self.new_state_memory[index] = state_
         self.action_memory[index] = action
         self.reward_memory[index] = reward
-        self.terminal_memory[index] = 1 - done
+        self.terminal_memory[index] = done
         self.mem_cntr += 1
 
     def sample_buffer(self, batch_size):
@@ -60,13 +60,13 @@ class ReplayBuffer(object):
         return states, actions, rewards, states_, terminal
 
 class CriticNetwork(nn.Module):
-    def __init__(self, lr, input_dims, fc1_dims, fc2_dims, n_actions, name,
+    def __init__(self, lr, input_dims, n_actions, fc1_dims, fc2_dims, name,
                  chkpt_dir='tmp/ddpg', device='cpu'):
         super(CriticNetwork, self).__init__()
         self.input_dims = input_dims
+        self.n_actions = n_actions
         self.fc1_dims = fc1_dims
         self.fc2_dims = fc2_dims
-        self.n_actions = n_actions
         self.checkpoint_file = os.path.join(chkpt_dir,name+'_ddpg')
         self.device = device
 
@@ -108,21 +108,19 @@ class CriticNetwork(nn.Module):
         return state_action_value
 
     def save_checkpoint(self):
-        print('... saving checkpoint ...')
         T.save(self.state_dict(), self.checkpoint_file)
 
     def load_checkpoint(self):
-        print('... loading checkpoint ...')
         self.load_state_dict(T.load(self.checkpoint_file))
 
 class ActorNetwork(nn.Module):
-    def __init__(self, lr, input_dims, fc1_dims, fc2_dims, n_actions, name,
+    def __init__(self, lr, input_dims, n_actions, fc1_dims, fc2_dims, name,
                  chkpt_dir='tmp/ddpg', device='cpu'):
         super(ActorNetwork, self).__init__()
         self.input_dims = input_dims
+        self.n_actions = n_actions
         self.fc1_dims = fc1_dims
         self.fc2_dims = fc2_dims
-        self.n_actions = n_actions
         self.checkpoint_file = os.path.join(chkpt_dir,name+'_ddpg')
         self.device = device
 
@@ -160,37 +158,33 @@ class ActorNetwork(nn.Module):
         return x
 
     def save_checkpoint(self):
-        print('... saving checkpoint ...')
         T.save(self.state_dict(), self.checkpoint_file)
 
     def load_checkpoint(self):
-        print('... loading checkpoint ...')
         self.load_state_dict(T.load(self.checkpoint_file))
 
 class Agent(object):
-    def __init__(self, act_lr, crt_lr, tau, input_dims, n_actions,
+    def __init__(self, env, act_lr, crt_lr, tau,
                  gamma=0.99, max_size=1000000, batch_size=64, 
                  layer1_size=400, layer2_size=300):
+        self.input_dims = env.observation_space.shape[0]
+        self.n_actions = env.action_space.shape[0]
         self.gamma = gamma   # discount factor
         self.tau = tau       # target network updating weight
-        self.memory = ReplayBuffer(max_size, input_dims, n_actions)
+        self.memory = ReplayBuffer(max_size, self.input_dims, self.n_actions)
         self.batch_size = batch_size
 
-        self.actor = ActorNetwork(act_lr, input_dims, layer1_size,
-                                  layer2_size, n_actions=n_actions,
-                                  name='Actor')
-        self.critic = CriticNetwork(crt_lr, input_dims, layer1_size,
-                                    layer2_size, n_actions=n_actions,
-                                    name='Critic')
+        self.actor = ActorNetwork(act_lr, self.input_dims, self.n_actions,
+                                  layer1_size, layer2_size, name='Actor')
+        self.critic = CriticNetwork(crt_lr, self.input_dims, self.n_actions, 
+                                    layer1_size, layer2_size, name='Critic')
 
-        self.target_actor = ActorNetwork(act_lr, input_dims, layer1_size,
-                                         layer2_size, n_actions=n_actions,
-                                         name='TargetActor')
-        self.target_critic = CriticNetwork(crt_lr, input_dims, layer1_size,
-                                           layer2_size, n_actions=n_actions,
-                                           name='TargetCritic')
+        self.target_actor = ActorNetwork(act_lr, self.input_dims, self.n_actions,
+                                         layer1_size, layer2_size, name='TargetActor')
+        self.target_critic = CriticNetwork(crt_lr, self.input_dims, self.n_actions,
+                                           layer1_size, layer2_size, name='TargetCritic')
 
-        self.noise = OUActionNoise(mu=np.zeros(n_actions))
+        self.noise = OUActionNoise(mu=np.zeros(self.n_actions))
 
         self.update_network_parameters(tau=1)
 
@@ -213,7 +207,7 @@ class Agent(object):
                                     self.memory.sample_buffer(self.batch_size)
 
         reward = T.tensor(reward, dtype=T.float).to(self.critic.device)
-        done = T.tensor(done).to(self.critic.device)
+        # done = T.tensor(done).to(self.critic.device)
         new_state = T.tensor(new_state, dtype=T.float).to(self.critic.device)
         action = T.tensor(action, dtype=T.float).to(self.critic.device)
         state = T.tensor(state, dtype=T.float).to(self.critic.device)
@@ -222,14 +216,11 @@ class Agent(object):
         self.target_critic.eval()
         self.critic.eval()
         target_actions = self.target_actor.forward(new_state)
-        critic_value_ = self.target_critic.forward(new_state, target_actions)
-        critic_value = self.critic.forward(state, action)
+        critic_value_ = self.target_critic.forward(new_state, target_actions).view(-1)
+        # critic_value_[done] = 0.0    # In building context, terminal state does not have value of 0
+        critic_value = self.critic.forward(state, action).view(-1)
 
-        target = []
-        for j in range(self.batch_size):
-            target.append(reward[j] + self.gamma*critic_value_[j]*done[j])
-        target = T.tensor(target).to(self.critic.device)
-        target = target.view(self.batch_size, 1)
+        target = reward + self.gamma*critic_value_
 
         self.critic.train()
         self.critic.optimizer.zero_grad()
@@ -254,66 +245,39 @@ class Agent(object):
         if tau is None:
             tau = self.tau
 
-        actor_params = self.actor.named_parameters()
-        critic_params = self.critic.named_parameters()
-        target_actor_params = self.target_actor.named_parameters()
-        target_critic_params = self.target_critic.named_parameters()
+        updated_actor = update_single_target_network_parameters(
+            self.actor, self.target_actor, tau
+            )
+        updated_critic = update_single_target_network_parameters(
+            self.critic, self.target_critic, tau
+        )
+        
+        self.target_actor.load_state_dict(updated_actor)
+        self.target_critic.load_state_dict(updated_critic)
 
-        critic_state_dict = dict(critic_params)
-        actor_state_dict = dict(actor_params)
-        target_critic_dict = dict(target_critic_params)
-        target_actor_dict = dict(target_actor_params)
-
-        for name in critic_state_dict:
-            critic_state_dict[name] = tau*critic_state_dict[name].clone() + \
-                                      (1-tau)*target_critic_dict[name].clone()
-
-        self.target_critic.load_state_dict(critic_state_dict)
-
-        for name in actor_state_dict:
-            actor_state_dict[name] = tau*actor_state_dict[name].clone() + \
-                                      (1-tau)*target_actor_dict[name].clone()
-        self.target_actor.load_state_dict(actor_state_dict)
-
-        """
-        #Verify that the copy assignment worked correctly
-        target_actor_params = self.target_actor.named_parameters()
-        target_critic_params = self.target_critic.named_parameters()
-
-        critic_state_dict = dict(target_critic_params)
-        actor_state_dict = dict(target_actor_params)
-        print('\nActor Networks', tau)
-        for name, param in self.actor.named_parameters():
-            print(name, T.equal(param, actor_state_dict[name]))
-        print('\nCritic Networks', tau)
-        for name, param in self.critic.named_parameters():
-            print(name, T.equal(param, critic_state_dict[name]))
-        input()
-        """
     def save_models(self):
+        print('.... saving models ....')
         self.actor.save_checkpoint()
         self.target_actor.save_checkpoint()
         self.critic.save_checkpoint()
         self.target_critic.save_checkpoint()
 
     def load_models(self):
+        print('.... loading models ....')
         self.actor.load_checkpoint()
         self.target_actor.load_checkpoint()
         self.critic.load_checkpoint()
         self.target_critic.load_checkpoint()
 
-    def check_actor_params(self):
-        current_actor_params = self.actor.named_parameters()
-        current_actor_dict = dict(current_actor_params)
-        original_actor_dict = dict(self.original_actor.named_parameters())
-        original_critic_dict = dict(self.original_critic.named_parameters())
-        current_critic_params = self.critic.named_parameters()
-        current_critic_dict = dict(current_critic_params)
-        print('Checking Actor parameters')
+def update_single_target_network_parameters(network, target_network, tau):
+    params = network.named_parameters()
+    target_params = target_network.named_parameters()
 
-        for param in current_actor_dict:
-            print(param, T.equal(original_actor_dict[param], current_actor_dict[param]))
-        print('Checking critic parameters')
-        for param in current_critic_dict:
-            print(param, T.equal(original_critic_dict[param], current_critic_dict[param]))
-        input()
+    params_dict = dict(params)
+    target_params_dict = dict(target_params)
+
+    for p in params_dict:
+        params_dict[p] = tau*params_dict[p].clone() + \
+                    (1-tau)*target_params_dict[p].clone()
+    
+    return params_dict

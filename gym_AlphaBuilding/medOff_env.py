@@ -70,8 +70,8 @@ class MedOffEnv(Env):
                                      0.1, 0, 0.1, 0, 0.1, 0, 0.1, 0])
 
         # Define Action Space:
-        self.action_space = spaces.Box(low=np.array([10, 0,     0, 0,    0, 0,    0, 0,    0, 0,    0, 0,    0, 0,    0, 0,    0, 0,    0]),
-                                      high=np.array([30, 1, 10000, 1,10000, 1,10000, 1,10000, 1,10000, 1,10000, 1,10000, 1,10000, 1,10000]),
+        self.action_space = spaces.Box(low=np.array([ 10, 0,     0, 0,    0, 0,    0, 0,    0, 0,    0, 0,    0, 0,    0, 0,    0, 0,    0]),
+                                       high=np.array([30, 1, 10000, 1,10000, 1,10000, 1,10000, 1,10000, 1,10000, 1,10000, 1,10000, 1,10000]),
                                        dtype=np.float32)
 
         #  Define Observation Space
@@ -206,7 +206,6 @@ class MedOffEnv(Env):
         reheat_energy = (act[2] + act[4] + act[6] + act[8] + act[10] +\
             act[12] + act[14] + act[16] + act[18])/(1000*4)   # unit:kWh, W->kW, 15min per timestep, -> h
         cost_energy = ahu_energy + reheat_energy
-
 
         # comfort cost
         zones_temp = obs[3:12]
