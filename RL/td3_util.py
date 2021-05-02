@@ -19,38 +19,7 @@ import torch.nn as nn
 import torch.optim as optim
 import os
 
-class ReplayBuffer():
-    def __init__(self, max_size, input_shape, n_actions):
-        self.mem_size = max_size
-        self.mem_cntr = 0
-        self.state_memory = np.zeros((self.mem_size, input_shape))
-        self.new_state_memory = np.zeros((self.mem_size, input_shape))
-        self.action_memory = np.zeros((self.mem_size, n_actions))
-        self.reward_memory = np.zeros(self.mem_size)
-        self.terminal_memory = np.zeros(self.mem_size, dtype=np.bool)
-
-    def store_transition(self, state, action, reward, state_, done):
-        index = self.mem_cntr % self.mem_size
-        self.state_memory[index] = state
-        self.new_state_memory[index] = state_
-        self.terminal_memory[index] = done
-        self.reward_memory[index] = reward
-        self.action_memory[index] = action
-
-        self.mem_cntr += 1
-
-    def sample_buffer(self, batch_size):
-        max_mem = min(self.mem_cntr, self.mem_size)
-
-        batch = np.random.choice(max_mem, batch_size)
-
-        states = self.state_memory[batch]
-        states_ = self.new_state_memory[batch]
-        actions = self.action_memory[batch]
-        rewards = self.reward_memory[batch]
-        dones = self.terminal_memory[batch]
-
-        return states, actions, rewards, states_, dones
+from util import ReplayBuffer, update_single_target_network_parameters, weights_init_normal
 
 
 class CriticNetwork(nn.Module):
@@ -66,24 +35,33 @@ class CriticNetwork(nn.Module):
         self.checkpoint_dir = chkpt_dir
         self.checkpoint_file = os.path.join(self.checkpoint_dir, name+'_td3')
 
-        self.fc1 = nn.Linear(self.input_dims + n_actions, self.fc1_dims)
-        self.fc2 = nn.Linear(self.fc1_dims, self.fc2_dims)
-        self.q = nn.Linear(self.fc2_dims, 1)
-        self.q.weight.data.uniform_(-init_w, init_w)
-        self.q.bias.data.uniform_(-init_w, init_w)
+        self.critic = nn.Sequential(
+            nn.Linear(self.input_dims + n_actions, self.fc1_dims),
+            nn.ReLU(),
+            nn.Linear(self.fc1_dims, self.fc2_dims),
+            nn.ReLU,
+            nn.Linear(self.fc2_dims, 1)
+        )
+        self.critic.apply(weights_init_normal)
+        # self.fc1 = nn.Linear(self.input_dims + n_actions, self.fc1_dims)
+        # self.fc2 = nn.Linear(self.fc1_dims, self.fc2_dims)
+        # self.q = nn.Linear(self.fc2_dims, 1)
+        # self.q.weight.data.uniform_(-init_w, init_w)
+        # self.q.bias.data.uniform_(-init_w, init_w)
 
         self.optimizer = optim.Adam(self.parameters(), lr=crt_lr)
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
-
         self.to(self.device)
 
     def forward(self, state, action):
-        q_action_value = self.fc1(T.cat([state, action], dim=1))
-        q_action_value = F.relu(q_action_value)
-        q_action_value = self.fc2(q_action_value)
-        q_action_value = F.relu(q_action_value)
+        action_value = T.cat([state, action], dim=1)
+        # q_action_value = self.fc1(action_value)
+        # q_action_value = F.relu(q_action_value)
+        # q_action_value = self.fc2(q_action_value)
+        # q_action_value = F.relu(q_action_value)
+        # q = self.q(q_action_value)
 
-        q = self.q(q_action_value)
+        q = self.critic(action_value)
 
         return q
 
@@ -106,24 +84,35 @@ class ActorNetwork(nn.Module):
         self.checkpoint_dir = chkpt_dir
         self.checkpoint_file = os.path.join(self.checkpoint_dir, name+'_td3')
 
-        self.fc1 = nn.Linear(self.input_dims, self.fc1_dims)
-        self.fc2 = nn.Linear(self.fc1_dims, self.fc2_dims)
-        self.mu = nn.Linear(self.fc2_dims, self.n_actions)
-        self.mu.weight.data.uniform_(-init_w, init_w)
-        self.mu.bias.data.uniform_(-init_w, init_w) 
+        self.actor = nn.Sequential(
+            nn.Linear(self.input_dims, self.fc1_dims),
+            nn.ReLU,
+            nn.Linear(self.fc1_dims, self.fc2_dims),
+            nn.ReLU(),
+            nn.Linear(self.fc2_dims, self.n_actions)
+        )
+        self.actor.apply(weights_init_normal)
+
+        # self.fc1 = nn.Linear(self.input_dims, self.fc1_dims)
+        # self.fc2 = nn.Linear(self.fc1_dims, self.fc2_dims)
+        # self.mu = nn.Linear(self.fc2_dims, self.n_actions)
+        # self.mu.weight.data.uniform_(-init_w, init_w)
+        # self.mu.bias.data.uniform_(-init_w, init_w) 
 
         self.optimizer = optim.Adam(self.parameters(), lr=act_lr)
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
-
         self.to(self.device)
 
     def forward(self, state):
-        prob = self.fc1(state)
-        prob = F.relu(prob)
-        prob = self.fc2(prob)
-        prob = F.relu(prob)
+        # prob = self.fc1(state)
+        # prob = F.relu(prob)
+        # prob = self.fc2(prob)
+        # prob = F.relu(prob)
+        # prob = self.mu(prob)
 
-        mu = T.tanh(self.mu(prob))
+        prob = self.actor(state)
+        
+        mu = T.tanh(prob)
 
         return mu
 
@@ -269,16 +258,3 @@ class Agent():
         self.critic_2.load_checkpoint()
         self.target_critic_1.load_checkpoint()
         self.target_critic_2.load_checkpoint()
-
-def update_single_target_network_parameters(network, target_network, tau):
-    params = network.named_parameters()
-    target_params = target_network.named_parameters()
-
-    params_dict = dict(params)
-    target_params_dict = dict(target_params)
-
-    for p in params_dict:
-        params_dict[p] = tau*params_dict[p].clone() + \
-                    (1-tau)*target_params_dict[p].clone()
-    
-    return params_dict

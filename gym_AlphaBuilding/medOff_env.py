@@ -80,19 +80,23 @@ class MedOffEnv(Env):
 		states_temp: temperature of controlled rooms
 		states_energy: fan, cooling and heating energy consumption [J]
         '''
+        self.states_time = ['hour', 'dayOfWeek']
         self.states_amb = ['outTemp', 'outSolar', 'outRH']
         self.states_temp = ['conf1Temp', 'conf2Temp', 'enOff1Temp', 'enOff2Temp', 'enOff3Temp',
                             'opOff1Temp', 'opOff2Temp', 'opOff3Temp', 'opOff4Temp']
         self.states_energy = ['fanEnergy', 'coolEnergy', 'heatEnergy']   # designed for interacting with the FMU
 
-        # self.obs_names: interface with fmu, get obs from fmu
-        self.obs_names = self.states_amb + self.states_temp + self.states_energy
+        # self.fmu_obs: interface with fmu, get obs from fmu, NOT the interface of env
+        self.fmu_obs = self.states_amb + self.states_temp + self.states_energy
+        
         # self.observation_space: interface with controller agent (act & crt network)
-        # include: states_amb, states_temp
+        # include: states_amb, states_temp, time
         # energy is not a state but a reward
-        self.observation_space = spaces.Box(low=np.array([-30.0,     0.0,   0.0,  5.0,  5.0,  5.0,  5.0,  5.0,  5.0,  5.0,  5.0,  5.0]),
+        self.obs_names = self.states_time + self.states_amb + self.states_temp
+        self.observation_space = spaces.Box(low=np.array(
+            [ 0.0, 0.0, -30.0,    0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0]),
                                             high=np.array(
-                                                [50.0, 1500.0, 100.0, 35.0, 35.0, 35.0, 35.0, 35.0, 35.0, 35.0, 35.0, 35.0]),
+            [23.0, 6.0,  50.0, 1500.0, 100.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0]),
                                             dtype=np.float32)
 
     def reset(self):
@@ -123,11 +127,16 @@ class MedOffEnv(Env):
                                         step_size=self.step_size,
                                         new_step=True)
             # extract the observations
-            obs_all_raw = np.concatenate(self.building_model.get(self.obs_names))
+            time_current = self.time_index[self.time_step_idx]
+            obs_all_raw = np.concatenate(self.building_model.get(self.fmu_obs))
             state_raw = obs_all_raw[:-3]   # exclude energy
+            hourOfDay = time_current.hour
+            dayOfWeek = time_current.dayofweek    # Monday=0, Sunday=6
+            state_raw = np.insert(state_raw, 
+                [self.obs_names.index('hour'), self.obs_names.index('dayOfWeek')],
+                [hourOfDay, dayOfWeek])
 
             # calculate the rewards from the observation, reheat of the current time step is in action_raw
-            time_current = self.time_index[self.time_step_idx]
             reward, energy, comfort, temp_min, temp_max, uncDegHour = self._compute_reward(obs_all_raw, time_current, action_raw, 22)
 
             if self.time_step_idx < (self.n_steps - 1):

@@ -11,41 +11,7 @@ import torch.optim as optim
 from torch.distributions.normal import Normal
 import numpy as np
 
-
-class ReplayBuffer():
-    def __init__(self, max_size, input_shape, n_actions):
-        self.mem_size = max_size
-        self.mem_cntr = 0
-        self.state_memory = np.zeros((self.mem_size, input_shape), dtype=np.float32)
-        self.new_state_memory = np.zeros((self.mem_size, input_shape), dtype=np.float32)
-        self.action_memory = np.zeros((self.mem_size, n_actions), dtype=np.float32)
-        self.reward_memory = np.zeros(self.mem_size, dtype=np.float32)
-        self.terminal_memory = np.zeros(self.mem_size, dtype=np.bool)
-
-    def store_transition(self, state, action, reward, state_, done):
-        index = self.mem_cntr % self.mem_size
-
-        self.state_memory[index] = state
-        self.new_state_memory[index] = state_
-        self.action_memory[index] = action
-        self.reward_memory[index] = reward
-        self.terminal_memory[index] = done
-
-        self.mem_cntr += 1
-
-    def sample_buffer(self, batch_size):
-        max_mem = min(self.mem_cntr, self.mem_size)
-
-        batch = np.random.choice(max_mem, batch_size)
-
-        states = self.state_memory[batch]
-        states_ = self.new_state_memory[batch]
-        actions = self.action_memory[batch]
-        rewards = self.reward_memory[batch]
-        dones = self.terminal_memory[batch]
-
-        return states, actions, rewards, states_, dones
-
+from util import ReplayBuffer, update_single_target_network_parameters, weights_init_normal
 
 class CriticNetwork(nn.Module):
     def __init__(self, crt_lr, input_dims, n_actions, fc1_dims=256, fc2_dims=256, init_w=3e-3,
@@ -59,11 +25,20 @@ class CriticNetwork(nn.Module):
         self.checkpoint_dir = chkpt_dir
         self.checkpoint_file = os.path.join(self.checkpoint_dir, name+'_sac')
 
-        self.fc1 = nn.Linear(self.input_dims+self.n_actions, self.fc1_dims)
-        self.fc2 = nn.Linear(self.fc1_dims, self.fc2_dims)
-        self.q = nn.Linear(self.fc2_dims, 1)
-        self.q.weight.data.uniform_(-init_w, init_w)
-        self.q.bias.data.uniform_(-init_w, init_w)
+        self.critic = nn.Sequential(
+            nn.Linear(self.input_dims+self.n_actions, self.fc1_dims),
+            nn.ReLU(),
+            nn.Linear(self.fc1_dims, self.fc2_dims),
+            nn.ReLU(),
+            nn.Linear(self.fc2_dims, 1)
+        )
+        self.critic.apply(weights_init_normal)
+
+        # self.fc1 = nn.Linear(self.input_dims+self.n_actions, self.fc1_dims)
+        # self.fc2 = nn.Linear(self.fc1_dims, self.fc2_dims)
+        # self.q = nn.Linear(self.fc2_dims, 1)
+        # self.q.weight.data.uniform_(-init_w, init_w)
+        # self.q.bias.data.uniform_(-init_w, init_w)
 
         self.optimizer = optim.Adam(self.parameters(), lr=crt_lr)
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
@@ -71,12 +46,14 @@ class CriticNetwork(nn.Module):
         self.to(self.device)
 
     def forward(self, state, action):
-        action_value = self.fc1(T.cat([state, action], dim=1))
-        action_value = F.relu(action_value)
-        action_value = self.fc2(action_value)
-        action_value = F.relu(action_value)
+        action_value = T.cat([state, action], dim=1)
+        # q_action_value = self.fc1(action_value)
+        # q_action_value = F.relu(q_action_value)
+        # q_action_value = self.fc2(q_action_value)
+        # q_action_value = F.relu(q_action_value)
+        # q = self.q(q_action_value)
 
-        q = self.q(action_value)
+        q = self.critic(action_value)
 
         return q
 
@@ -97,11 +74,20 @@ class ValueNetwork(nn.Module):
         self.checkpoint_dir = chkpt_dir
         self.checkpoint_file = os.path.join(self.checkpoint_dir, name+'_sac')
 
-        self.fc1 = nn.Linear(self.input_dims, self.fc1_dims)
-        self.fc2 = nn.Linear(self.fc1_dims, fc2_dims)
-        self.v = nn.Linear(self.fc2_dims, 1)
-        self.v.weight.data.uniform_(-init_w, init_w)
-        self.v.bias.data.uniform_(-init_w, init_w)        
+        self.value = nn.Sequential(
+            nn.Linear(self.input_dims, self.fc1_dims),
+            nn.ReLU(),
+            nn.Linear(self.fc1_dims, fc2_dims),
+            nn.ReLU(),
+            nn.Linear(self.fc2_dims, 1)
+        )
+        self.value.apply(weights_init_normal)
+
+        # self.fc1 = nn.Linear(self.input_dims, self.fc1_dims)
+        # self.fc2 = nn.Linear(self.fc1_dims, fc2_dims)
+        # self.v = nn.Linear(self.fc2_dims, 1)
+        # self.v.weight.data.uniform_(-init_w, init_w)
+        # self.v.bias.data.uniform_(-init_w, init_w)        
 
         self.optimizer = optim.Adam(self.parameters(), lr=crt_lr)
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
@@ -109,12 +95,13 @@ class ValueNetwork(nn.Module):
         self.to(self.device)
 
     def forward(self, state):
-        state_value = self.fc1(state)
-        state_value = F.relu(state_value)
-        state_value = self.fc2(state_value)
-        state_value = F.relu(state_value)
-
-        v = self.v(state_value)
+        # state_value = self.fc1(state)
+        # state_value = F.relu(state_value)
+        # state_value = self.fc2(state_value)
+        # state_value = F.relu(state_value)
+        # v = self.v(state_value)
+        
+        v = self.value(state)
 
         return v
 
@@ -138,14 +125,24 @@ class ActorNetwork(nn.Module):
         self.max_action = max_action
         self.reparam_noise = 1e-6
 
-        self.fc1 = nn.Linear(self.input_dims, self.fc1_dims)
-        self.fc2 = nn.Linear(self.fc1_dims, self.fc2_dims)
+        self.actor = nn.Sequential(
+            nn.Linear(self.input_dims, self.fc1_dims),
+            nn.ReLU(),
+            nn.Linear(self.fc1_dims, self.fc2_dims),
+            nn.ReLU()
+        )
+        # self.fc1 = nn.Linear(self.input_dims, self.fc1_dims)
+        # self.fc2 = nn.Linear(self.fc1_dims, self.fc2_dims)
         self.mu = nn.Linear(self.fc2_dims, self.n_actions)
         self.sigma = nn.Linear(self.fc2_dims, self.n_actions)
-        self.mu.weight.data.uniform_(-init_w, init_w)
-        self.mu.bias.data.uniform_(-init_w, init_w)    
-        self.sigma.weight.data.uniform_(-init_w, init_w)
-        self.sigma.bias.data.uniform_(-init_w, init_w)
+
+        # self.mu.weight.data.uniform_(-init_w, init_w)
+        # self.mu.bias.data.uniform_(-init_w, init_w)    
+        # self.sigma.weight.data.uniform_(-init_w, init_w)
+        # self.sigma.bias.data.uniform_(-init_w, init_w)
+        self.actor.apply(weights_init_normal)
+        self.mu.apply(weights_init_normal)
+        self.sigma.apply(weights_init_normal)
 
         self.optimizer = optim.Adam(self.parameters(), lr=act_lr)
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
@@ -153,10 +150,11 @@ class ActorNetwork(nn.Module):
         self.to(self.device)
 
     def forward(self, state):
-        prob = self.fc1(state)
-        prob = F.relu(prob)
-        prob = self.fc2(prob)
-        prob = F.relu(prob)
+        # prob = self.fc1(state)
+        # prob = F.relu(prob)
+        # prob = self.fc2(prob)
+        # prob = F.relu(prob)
+        prob = self.actor(state)
 
         mu = self.mu(prob)
         sigma = self.sigma(prob)
@@ -314,16 +312,3 @@ class Agent():
         self.update_network_parameters()
 
         return critic_loss.item(), actor_loss.item()
-
-def update_single_target_network_parameters(network, target_network, tau):
-    params = network.named_parameters()
-    target_params = target_network.named_parameters()
-
-    params_dict = dict(params)
-    target_params_dict = dict(target_params)
-
-    for p in params_dict:
-        params_dict[p] = tau*params_dict[p].clone() + \
-                    (1-tau)*target_params_dict[p].clone()
-    
-    return params_dict

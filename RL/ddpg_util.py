@@ -5,6 +5,8 @@ import torch.nn.functional as F
 import torch.optim as optim
 import numpy as np
 
+from util import ReplayBuffer, update_single_target_network_parameters, weights_init_normal
+
 class OUActionNoise(object):
     def __init__(self, mu, sigma=0.15, theta=.2, dt=1e-2, x0=None):
         self.theta = theta
@@ -26,38 +28,6 @@ class OUActionNoise(object):
     def __repr__(self):
         return 'OrnsteinUhlenbeckActionNoise(mu={}, sigma={})'.format(
                                                             self.mu, self.sigma)
-
-class ReplayBuffer(object):
-    def __init__(self, max_size, input_shape, n_actions):
-        self.mem_size = max_size
-        self.mem_cntr = 0
-        self.state_memory = np.zeros((self.mem_size, input_shape))
-        self.new_state_memory = np.zeros((self.mem_size, input_shape))
-        self.action_memory = np.zeros((self.mem_size, n_actions))
-        self.reward_memory = np.zeros(self.mem_size)
-        self.terminal_memory = np.zeros(self.mem_size, dtype=np.bool)
-
-    def store_transition(self, state, action, reward, state_, done):
-        index = self.mem_cntr % self.mem_size
-        self.state_memory[index] = state
-        self.new_state_memory[index] = state_
-        self.action_memory[index] = action
-        self.reward_memory[index] = reward
-        self.terminal_memory[index] = done
-        self.mem_cntr += 1
-
-    def sample_buffer(self, batch_size):
-        max_mem = min(self.mem_cntr, self.mem_size)
-
-        batch = np.random.choice(max_mem, batch_size)
-
-        states = self.state_memory[batch]
-        actions = self.action_memory[batch]
-        rewards = self.reward_memory[batch]
-        states_ = self.new_state_memory[batch]
-        terminal = self.terminal_memory[batch]
-
-        return states, actions, rewards, states_, terminal
 
 class CriticNetwork(nn.Module):
     def __init__(self, lr, input_dims, n_actions, fc1_dims, fc2_dims, name,
@@ -268,16 +238,3 @@ class Agent(object):
         self.target_actor.load_checkpoint()
         self.critic.load_checkpoint()
         self.target_critic.load_checkpoint()
-
-def update_single_target_network_parameters(network, target_network, tau):
-    params = network.named_parameters()
-    target_params = target_network.named_parameters()
-
-    params_dict = dict(params)
-    target_params_dict = dict(target_params)
-
-    for p in params_dict:
-        params_dict[p] = tau*params_dict[p].clone() + \
-                    (1-tau)*target_params_dict[p].clone()
-    
-    return params_dict

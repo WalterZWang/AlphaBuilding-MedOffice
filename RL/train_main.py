@@ -47,7 +47,7 @@ if __name__ == "__main__":
         if load_checkpoint:
             agent.load_models()
 
-        for episode in range(1000):
+        for episode in range(20):
             obs = env.reset()
             done = False
             total_reward = 0

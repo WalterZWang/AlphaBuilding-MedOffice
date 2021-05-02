@@ -21,3 +21,7 @@ Difference between DDPG and SAC
 
 ### 2020-05-01
 1. Revise TD3: train actor every time step (previously, only every second step) (line 223)
+
+### 2020-05-02
+1. Change the Pytorch implementation of network from multiple layers to nn.Sequantial of td3
+2. Move common class/function (ReplayBuffer, update_single_target_network_parameters, weights_init_normal) to util.py
