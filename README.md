@@ -73,6 +73,7 @@ The first step is to initiate the environment. A list of input parameters to set
 Then at each time step, the environment consumes ``acts`` (determined by the controller), runs a single time step simulation, and returns ``states`` and ``comments``. The contents of ``acts``, ``states``, and ``comments`` are shown as follows:
 
 <img src="docs/fig/variables.png" width="1000" />
+
 ***HourOfDay***: *in the range of 0 to 23*
 
 ***DayOfWeek***: *in the range of 0 to 6, 0 is Monday, 6 is Sunday*
