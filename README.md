@@ -59,6 +59,7 @@ The co-simulation workflow between the environment and the controller is:
 
 <img src="docs/fig/interface.png" width="1000" />
 
+### Environment initialization
 The first step is to initiate the environment. A list of input parameters to set up the environment is shown as follows:
 
 | Input Parameter      | Description                                                            | Data Type| Default Value |
@@ -70,6 +71,7 @@ The first step is to initiate the environment. A list of input parameters to set
 | tz_name              | Thermal Time Constant, mean and std                                    | tuple    |'America/Los_Angeles' |
 | eprice_path          | Path to the utility price signal, not used for energy conservation     | str      |None              |
 
+### States, actions, and info/comments
 Then at each time step, the environment consumes ``acts`` (determined by the controller), runs a single time step simulation, and returns ``states`` and ``comments``. The contents of ``acts``, ``states``, and ``comments`` are shown as follows:
 
 <img src="docs/fig/variables.png" width="1000" />
@@ -78,6 +80,7 @@ Then at each time step, the environment consumes ``acts`` (determined by the con
 
 ***DayOfWeek***: *in the range of 0 to 6, 0 is Monday, 6 is Sunday*
 
+### Methods
 A list of methods provided by the environment is as follows:
 
 | Methods                  | Example                                 | Input          | Returns                                       |
