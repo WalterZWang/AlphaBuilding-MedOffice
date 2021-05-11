@@ -39,7 +39,7 @@ class CriticNetwork(nn.Module):
             nn.Linear(self.input_dims + n_actions, self.fc1_dims),
             nn.ReLU(),
             nn.Linear(self.fc1_dims, self.fc2_dims),
-            nn.ReLU,
+            nn.ReLU(),
             nn.Linear(self.fc2_dims, 1)
         )
         self.critic.apply(weights_init_normal)
@@ -86,7 +86,7 @@ class ActorNetwork(nn.Module):
 
         self.actor = nn.Sequential(
             nn.Linear(self.input_dims, self.fc1_dims),
-            nn.ReLU,
+            nn.ReLU(),
             nn.Linear(self.fc1_dims, self.fc2_dims),
             nn.ReLU(),
             nn.Linear(self.fc2_dims, self.n_actions)

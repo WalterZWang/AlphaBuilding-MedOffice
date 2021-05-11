@@ -159,7 +159,7 @@ class ActorNetwork(nn.Module):
         mu = self.mu(prob)
         sigma = self.sigma(prob)
 
-        sigma = T.clamp(sigma, min=self.reparam_noise, max=1)
+        sigma = T.clamp(sigma, min=self.reparam_noise, max=1)   # sigma can not be negative
 
         return mu, sigma
 
@@ -168,15 +168,15 @@ class ActorNetwork(nn.Module):
         probabilities = Normal(mu, sigma)
 
         if reparameterize:
-            actions = probabilities.rsample()  # sample plus noise
+            actions = probabilities.rsample()  # has grad_fn, can do actions.backward()
         else:
-            actions = probabilities.sample()   # sample only
+            actions = probabilities.sample()   # NOT have grad_fn, cannot do actions.backward()
 
         action = T.tanh(actions)*T.tensor(self.max_action).to(self.device).float()  # 1. scale action to fit the environment
                                     # 2. action casted to float so that can be used by T.cat, otherwise it is double type
         log_probs = probabilities.log_prob(actions)             # to calculate the loss function
-        log_probs -= T.log(1-action.pow(2)+self.reparam_noise)
-        log_probs = log_probs.sum(1, keepdim=True)
+        log_probs -= T.log(1-action.pow(2)+self.reparam_noise)  # handle the scaling of action (as we use tanh to scale)
+        log_probs = log_probs.sum(1, keepdim=True)   # 0-axis: batch, 1-axis: components of actions, summed over to get a scalar
 
         return action, log_probs
 
@@ -189,7 +189,7 @@ class ActorNetwork(nn.Module):
 
 class Agent():
     def __init__(self, env, 
-            act_lr=0.0003, crt_lr=0.0003, gamma=0.99, max_size=1000000, tau=0.005,
+            act_lr=0.00003, crt_lr=0.0003, gamma=0.99, max_size=1000000, tau=0.005,
             layer1_size=256, layer2_size=256, batch_size=64, reward_scale=1):
         '''Higher reward scale means higher weights given to rewards ratehr than entropy'''
         self.gamma = gamma

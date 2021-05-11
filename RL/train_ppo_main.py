@@ -12,25 +12,24 @@ if __name__ == "__main__":
                                     sim_year = 2015,
                                     tz_name = 'America/Los_Angeles')
 
-    # from ddpg_util import Agent
-    # agent = Agent(env, act_lr=0.000025, crt_lr=0.00025, tau=0.001, 
-    #               batch_size=64,  layer1_size=400, layer2_size=300)
+    N = 32              # training per N number of steps
+    n_steps = 0         # count when we should train
 
-    # from sac_util import Agent
-    # agent = Agent(env, reward_scale=3)
+    batch_size = 8
+    n_epochs = 52
+    
 
-    from td3_util import Agent
-    agent = Agent(env, act_lr=0.000025, crt_lr=0.00025, tau=0.001, 
-                  batch_size=64,  layer1_size=256, layer2_size=256)
+    from ppo_util import Agent
+    agent = Agent(env, act_lr=0.000005, crt_lr=0.00005, n_epochs=n_epochs)
 
-    RunName = 'ppo_test'
+    RunName = 'ppo_run2'
     # initiate log file and tensorboard writer
     save_path = os.path.join("log")
     if not os.path.exists(save_path):
         os.makedirs(save_path)
 
     writer = SummaryWriter(comment = RunName)
-    np.random.seed(0)
+    np.random.seed(2)
 
     with open(os.path.join(save_path,"{0}.log".format(RunName)), "a") as f:
         #agent.load_models()
@@ -47,7 +46,9 @@ if __name__ == "__main__":
         if load_checkpoint:
             agent.load_models()
 
-        for episode in range(22):
+        n_episode = 32
+
+        for episode in range(n_episode):
             obs = env.reset()
             done = False
             total_reward = 0
@@ -57,22 +58,22 @@ if __name__ == "__main__":
             total_crt_loss = 0
             total_act_loss = 0
             while not done:
-                act = agent.choose_action(obs)
+                act, log_prob, val = agent.choose_action(obs)
                 new_state, reward, done, comments = env.step(act)
                 total_reward += reward
-                agent.remember(obs, act, reward, new_state, int(done))
+                agent.remember(obs, act, log_prob, val, reward, done)
+                n_steps += 1
 
-                if not load_checkpoint:
-                    loss = agent.learn()
-                    if loss:
-                        crt_loss, act_loss = loss
-                        # Book keeping
-                        energy, comfort, temp_min, temp_max, uncDegHour = comments
-                        total_energy += energy
-                        total_comfort += comfort
-                        total_uncDegHour += uncDegHour
-                        total_crt_loss += crt_loss
-                        total_act_loss += act_loss
+                if n_steps % N == 0:
+                    crt_loss, act_loss = agent.learn()
+                    total_crt_loss += crt_loss
+                    total_act_loss += act_loss
+
+                # Book keeping
+                energy, comfort, temp_min, temp_max, uncDegHour = comments
+                total_energy += energy
+                total_comfort += comfort
+                total_uncDegHour += uncDegHour
                 
                 obs = new_state
 
