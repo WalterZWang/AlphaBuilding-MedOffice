@@ -17,9 +17,29 @@ from gym.utils import seeding
 
 
 class MedOffEnv(Env):
-    """ MedOffEnv is a custom Gym Environment
+    """ AlphaResEnv is a custom Gym Environment 
     Args:
+    - building_path: string, the path to the fmu simulate the building dynamics
+    - sim_days: int, number of days for simulation, unit: day, example - 365
+    - step_size: int, step size of simulation, unit: second, example - 900
+    - sim_year: int, the year of simulation, this is to create the time index, example - 2015, 
+        need to be careful about the leap year
+    - tz_name: string, the name of the time zone, this is to create the time index, example - 'America/Los_Angeles',
+    - occupied_hour: tuple, occupied hours, the weights of comfort will be higher to calculate the rewards for the occupied hours,
+        example - (6, 20),
+    - weight_reward: tuple, the weight of comfort over energy to calculate the reward, example - (0.2, 0.002)
+    - eprice_path: string, the path to the electricity price, currently not used in this version,
 
+    Action space:
+    - 19 actions in total
+        - act[0]: AHU supply air temperature
+        - act[1:19]: VAV flow rate and reheat q, for the 2 conference rooms, 3 enclosed offices, and 4 open offices respectively
+
+    Observation space:
+    - 12 observations in total
+        - obs[0:2]: time - hour of day (0-23), and day of week (0-6, 5 and 6 are weekends)
+        - obs[2:5]: ambient weather - temperature, solar radiation, relative humidity
+        - obs[5:12]: indoor temperature - for the 2 conference rooms, 3 enclosed offices, and 4 open offices respectively
     """
     metadata = {'render.modes': ['human']}
 
@@ -29,12 +49,16 @@ class MedOffEnv(Env):
                  step_size=None,  # unit: [s]
                  sim_year=2015,
                  tz_name='America/Los_Angeles',
-                 eprice_path=None):
+                 occupied_hour = (6, 20),
+                 weight_reward = (0.2, 0.02),
+                 eprice_path=None):     
 
         # load fmu models
         self.building_path = building_path
         self.building_model = load_fmu(
             self.building_path, kind='cs', log_level=0)
+        self.occupied_hour = occupied_hour
+        self.weight_reward = weight_reward
 
         # define simulations time steps
         self.tz_local = pytz.timezone(tz_name)
@@ -92,7 +116,7 @@ class MedOffEnv(Env):
         # self.observation_space: interface with controller agent (act & crt network)
         # include: states_amb, states_temp, time
         # energy is not a state but a reward
-        self.obs_names = self.states_time + self.states_amb + self.states_temp
+        self.env_obs = self.states_time + self.states_amb + self.states_temp
         self.observation_space = spaces.Box(low=np.array(
             [ 0.0, 0.0, -30.0,    0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0]),
                                             high=np.array(
@@ -133,11 +157,12 @@ class MedOffEnv(Env):
             hourOfDay = time_current.hour
             dayOfWeek = time_current.dayofweek    # Monday=0, Sunday=6
             state_raw = np.insert(state_raw, 
-                [self.obs_names.index('hour'), self.obs_names.index('dayOfWeek')],
+                [self.env_obs.index('hour'), self.env_obs.index('dayOfWeek')],
                 [hourOfDay, dayOfWeek])
 
             # calculate the rewards from the observation, reheat of the current time step is in action_raw
-            reward, energy, comfort, temp_min, temp_max, uncDegHour = self._compute_reward(obs_all_raw, time_current, action_raw, 22)
+            reward, energy, comfort, temp_min, temp_max, uncDegHour = self._compute_reward(
+                obs_all_raw, time_current, action_raw, 22, self.weight_reward, self.occupied_hour)
 
             if self.time_step_idx < (self.n_steps - 1):
                 done = False
@@ -191,7 +216,7 @@ class MedOffEnv(Env):
         return actions_scaled
 
 
-    def _compute_reward(self, obs, time, act, T_set, comfort_tol = 2, tau=[0.2, 0.002]):
+    def _compute_reward(self, obs, time, act, T_set, weight, occupied_hour, comfort_tol = 2):
         '''
         Similar function to the compute_reward method in analysis/utils.py
         Difference is: 1. one more output - energy
@@ -201,8 +226,8 @@ class MedOffEnv(Env):
         time: current time, pandas timestamp, support attribute h, and method weekday()
         act: action of previous time step, raw value
         T_set: float, temperature setpoint for each thermal zone
+        weight: weights of comfort over energy, higher weights of comfort during office hour
         comfort_tol: float, comfort tolerance, used to calculate the uncomfortable degree hour
-        tau: weights of comfort over energy, higher weights of comfort during office hour
 
         Output
         cost_comfort: cost of comfort for this time step
@@ -218,28 +243,24 @@ class MedOffEnv(Env):
 
         # comfort cost
         zones_temp = obs[3:12]
-        # the comfort/energy weight is determined on time
-        # officeHour = (time.weekday()<5) & (time.hour<18) & (time.hour>8)
-        # if officeHour:
-        #     tau_comfort = tau[0]
-        #     tau_udh = 1
-        # else:
-        #     tau_comfort = tau[1]
-        #     tau_udh = 0
+        # the comfort/energy weight is determined on time, comfort cost weight is smaller if space is non-occupied
+        officeHour = (time.weekday()<5) & (time.hour<occupied_hour[1]) & (time.hour>occupied_hour[0])
+        if officeHour:
+            weight_comfort = weight[0]
+            weight_udh = 1
+        else:
+            weight_comfort = weight[1]
+            weight_udh = 0
         
-        tau_comfort = tau[0]
-        tau_udh = 1
-        
-        # comfort cost is 0 if space is non-occupied
         cost_comfort_t = sum((zones_temp-T_set)**2)
         zone_temp_min = min(zones_temp)
         zone_temp_max = max(zones_temp)
 
         heaDegHour = sum(np.maximum(zones_temp-(T_set+comfort_tol), np.zeros(9)))
         cooDegHour = sum(np.maximum((T_set-comfort_tol)-zones_temp, np.zeros(9)))
-        uncDegHour = (heaDegHour+cooDegHour) * tau_udh
+        uncDegHour = (heaDegHour+cooDegHour) * weight_udh
 
-        cost_comfort = tau_comfort * cost_comfort_t
+        cost_comfort = weight_comfort * cost_comfort_t
 
         reward_t = -1.0 * (cost_energy + cost_comfort)
 
@@ -312,13 +333,13 @@ def get_price_data_from_df(df, start_time=None, end_time=None):
 
 
 class ExperienceBuffer:
-    def __init__(self, obs_names, action_names):
+    def __init__(self, env_obs, action_names):
         # initialize model observation
-        self.obs_names = obs_names
+        self.env_obs = env_obs
         self.action_names = action_names
 
         obs_dict = dict()
-        for obs_i in obs_names:
+        for obs_i in env_obs:
             obs_dict[obs_i] = [0.0]
         self.obs_df = pd.DataFrame(obs_dict)
 
@@ -341,8 +362,8 @@ class ExperienceBuffer:
             action_df_0, ignore_index=True)
 
         obs_dict = dict()
-        for i in range(len(self.obs_names)-3):   # obs does not contain energy consumption data
-            obs_i = self.obs_names[i]
+        for i in range(len(self.env_obs)-3):   # obs does not contain energy consumption data
+            obs_i = self.env_obs[i]
             obs_dict[obs_i] = [obs[i]]
         obs_df_0 = pd.DataFrame(obs_dict)
         self.obs_df = self.obs_df.append(obs_df_0, ignore_index=True)

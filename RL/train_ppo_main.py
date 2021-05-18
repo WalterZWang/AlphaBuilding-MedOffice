@@ -16,11 +16,11 @@ if __name__ == "__main__":
     n_steps = 0         # count when we should train
 
     batch_size = 8
-    n_epochs = 52
+    n_epochs = N
     
 
     from ppo_util import Agent
-    agent = Agent(env, act_lr=0.000005, crt_lr=0.00005, n_epochs=n_epochs)
+    agent = Agent(env, act_lr=0.0000025, crt_lr=0.000025, n_epochs=n_epochs)
 
     RunName = 'ppo_run2'
     # initiate log file and tensorboard writer

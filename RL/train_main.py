@@ -7,30 +7,32 @@ from tensorboardX import SummaryWriter
 if __name__ == "__main__":
 
     env = medOff_env.MedOffEnv(building_path = 'gym_AlphaBuilding/fmuModel/v1_fmu.fmu',
-                                    sim_days = 365,
-                                    step_size = 900,
-                                    sim_year = 2015,
-                                    tz_name = 'America/Los_Angeles')
+                               sim_days = 365,
+                               step_size = 900,
+                               sim_year = 2015,
+                               tz_name = 'America/Los_Angeles',
+                               occupied_hour = (6, 20),
+                               weight_reward = (0.2, 0.01))
 
-    # from ddpg_util import Agent
-    # agent = Agent(env, act_lr=0.000025, crt_lr=0.00025, tau=0.001, 
-    #               batch_size=64,  layer1_size=400, layer2_size=300)
+    from ddpg_util import Agent
+    agent = Agent(env, act_lr=0.000025, crt_lr=0.00025, tau=0.001, 
+                  batch_size=64,  layer1_size=400, layer2_size=300)
 
     # from sac_util import Agent
     # agent = Agent(env, reward_scale=3)
 
-    from td3_util import Agent
-    agent = Agent(env, act_lr=0.000025, crt_lr=0.00025, tau=0.001, 
-                  batch_size=64,  layer1_size=256, layer2_size=256)
+    # from td3_util import Agent
+    # agent = Agent(env, act_lr=0.000025, crt_lr=0.00025, tau=0.001, 
+    #               batch_size=64,  layer1_size=256, layer2_size=256)
 
-    RunName = 'ppo_test'
+    RunName = 'occ_ddpg_run1'
     # initiate log file and tensorboard writer
     save_path = os.path.join("log")
     if not os.path.exists(save_path):
         os.makedirs(save_path)
 
     writer = SummaryWriter(comment = RunName)
-    np.random.seed(0)
+    np.random.seed(1)
 
     with open(os.path.join(save_path,"{0}.log".format(RunName)), "a") as f:
         #agent.load_models()
