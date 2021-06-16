@@ -13,7 +13,7 @@ Output_EPExport_Slave
 runs
 
 # Results log
-log
+# log
 
 # Distribution / packaging
 .Python
@@ -64,7 +64,7 @@ coverage.xml
 *.pot
 
 # Django stuff:
-*.log
+# *.log
 local_settings.py
 db.sqlite3
 db.sqlite3-journal

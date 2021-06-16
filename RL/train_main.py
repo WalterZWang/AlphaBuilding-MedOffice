@@ -25,14 +25,14 @@ if __name__ == "__main__":
     # agent = Agent(env, act_lr=0.000025, crt_lr=0.00025, tau=0.001, 
     #               batch_size=64,  layer1_size=256, layer2_size=256)
 
-    RunName = 'occ_ddpg_run1'
+    RunName = 'occ_ddpg_run10'
     # initiate log file and tensorboard writer
     save_path = os.path.join("log")
     if not os.path.exists(save_path):
         os.makedirs(save_path)
 
     writer = SummaryWriter(comment = RunName)
-    np.random.seed(1)
+    np.random.seed(10)
 
     with open(os.path.join(save_path,"{0}.log".format(RunName)), "a") as f:
         #agent.load_models()
@@ -90,7 +90,7 @@ if __name__ == "__main__":
             writer.add_scalar("reward", total_reward, episode)
             writer.add_scalar("energy",total_energy, episode)
             writer.add_scalar("comfort",total_comfort, episode)
-            writer.add_scalar("uncDegHour",total_uncDegHour/(9*8760*4), episode)
+            writer.add_scalar("uncDegHour",total_uncDegHour/(9*8760*4*(5/7)*(14/24)), episode)
             writer.add_scalar("crt_loss",total_crt_loss, episode)
             writer.add_scalar("act_loss",total_act_loss, episode)       
 
