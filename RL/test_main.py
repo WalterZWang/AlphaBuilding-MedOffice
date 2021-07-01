@@ -41,7 +41,6 @@ def test(test_algorithm, env):
         new_state = env.rescale_state(new_state)
         act = env.rescale_action(act)
         
-        result = np.append(new_state, act)
         result = np.concatenate((new_state, act, comments, np.array([reward])))
 
         result_all.append(result)
@@ -65,5 +64,5 @@ if __name__ == "__main__":
                                occupied_hour = (6, 20),
                                weight_reward = (0.2, 0.01))
 
-    for test_algorithm in ['ddpg', 'sac', 'td3']:
+    for test_algorithm in ['ddpg']:
         test(test_algorithm, env)

@@ -156,10 +156,8 @@ class MedOffEnv(Env):
             state_raw = obs_all_raw[:-3]   # exclude energy
             hourOfDay = time_current.hour
             dayOfWeek = time_current.dayofweek    # Monday=0, Sunday=6
-            state_raw = np.insert(state_raw, 
-                [self.env_obs.index('hour'), self.env_obs.index('dayOfWeek')],
-                [hourOfDay, dayOfWeek])
-
+            state_raw = np.concatenate((np.array([hourOfDay, dayOfWeek]), state_raw))
+            
             # calculate the rewards from the observation, reheat of the current time step is in action_raw
             reward, energy, comfort, temp_min, temp_max, uncDegHour = self._compute_reward(
                 obs_all_raw, time_current, action_raw, 22, self.weight_reward, self.occupied_hour)
