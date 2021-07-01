@@ -110,7 +110,7 @@ class ValueNetwork(nn.Module):
     def save_checkpoint(self, modelName):
         T.save(self.state_dict(), self.checkpoint_file + modelName)
 
-    def load_checkpoint(self modelName):
+    def load_checkpoint(self, modelName):
         self.load_state_dict(T.load(self.checkpoint_file + modelName))
 
 
