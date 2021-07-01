@@ -13,9 +13,10 @@ import numpy as np
 
 from util import ReplayBuffer, update_single_target_network_parameters, weights_init_normal
 
+
 class CriticNetwork(nn.Module):
     def __init__(self, crt_lr, input_dims, n_actions, fc1_dims=256, fc2_dims=256, init_w=3e-3,
-            name='critic', chkpt_dir='tmp/sac'):
+                 name='critic', chkpt_dir='tmp/sac'):
         super(CriticNetwork, self).__init__()
         self.input_dims = input_dims
         self.n_actions = n_actions
@@ -57,15 +58,16 @@ class CriticNetwork(nn.Module):
 
         return q
 
-    def save_checkpoint(self):
-        T.save(self.state_dict(), self.checkpoint_file)
+    def save_checkpoint(self, modelName):
+        T.save(self.state_dict(), self.checkpoint_file + modelName)
 
-    def load_checkpoint(self):
-        self.load_state_dict(T.load(self.checkpoint_file))
+    def load_checkpoint(self, modelName):
+        self.load_state_dict(T.load(self.checkpoint_file + modelName))
+
 
 class ValueNetwork(nn.Module):
     def __init__(self, crt_lr, input_dims, fc1_dims=256, fc2_dims=256, init_w=3e-3,
-            name='value', chkpt_dir='tmp/sac'):
+                 name='value', chkpt_dir='tmp/sac'):
         super(ValueNetwork, self).__init__()
         self.input_dims = input_dims
         self.fc1_dims = fc1_dims
@@ -87,7 +89,7 @@ class ValueNetwork(nn.Module):
         # self.fc2 = nn.Linear(self.fc1_dims, fc2_dims)
         # self.v = nn.Linear(self.fc2_dims, 1)
         # self.v.weight.data.uniform_(-init_w, init_w)
-        # self.v.bias.data.uniform_(-init_w, init_w)        
+        # self.v.bias.data.uniform_(-init_w, init_w)
 
         self.optimizer = optim.Adam(self.parameters(), lr=crt_lr)
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
@@ -100,20 +102,21 @@ class ValueNetwork(nn.Module):
         # state_value = self.fc2(state_value)
         # state_value = F.relu(state_value)
         # v = self.v(state_value)
-        
+
         v = self.value(state)
 
         return v
 
-    def save_checkpoint(self):
-        T.save(self.state_dict(), self.checkpoint_file)
+    def save_checkpoint(self, modelName):
+        T.save(self.state_dict(), self.checkpoint_file + modelName)
 
-    def load_checkpoint(self):
-        self.load_state_dict(T.load(self.checkpoint_file))
+    def load_checkpoint(self modelName):
+        self.load_state_dict(T.load(self.checkpoint_file + modelName))
+
 
 class ActorNetwork(nn.Module):
-    def __init__(self, act_lr, input_dims, n_actions, max_action, 
-            fc1_dims=256, fc2_dims=256, init_w=3e-3, name='actor', chkpt_dir='tmp/sac'):
+    def __init__(self, act_lr, input_dims, n_actions, max_action,
+                 fc1_dims=256, fc2_dims=256, init_w=3e-3, name='actor', chkpt_dir='tmp/sac'):
         super(ActorNetwork, self).__init__()
         self.input_dims = input_dims
         self.fc1_dims = fc1_dims
@@ -137,7 +140,7 @@ class ActorNetwork(nn.Module):
         self.sigma = nn.Linear(self.fc2_dims, self.n_actions)
 
         # self.mu.weight.data.uniform_(-init_w, init_w)
-        # self.mu.bias.data.uniform_(-init_w, init_w)    
+        # self.mu.bias.data.uniform_(-init_w, init_w)
         # self.sigma.weight.data.uniform_(-init_w, init_w)
         # self.sigma.bias.data.uniform_(-init_w, init_w)
         self.actor.apply(weights_init_normal)
@@ -159,7 +162,8 @@ class ActorNetwork(nn.Module):
         mu = self.mu(prob)
         sigma = self.sigma(prob)
 
-        sigma = T.clamp(sigma, min=self.reparam_noise, max=1)   # sigma can not be negative
+        # sigma can not be negative
+        sigma = T.clamp(sigma, min=self.reparam_noise, max=1)
 
         return mu, sigma
 
@@ -172,43 +176,50 @@ class ActorNetwork(nn.Module):
         else:
             actions = probabilities.sample()   # NOT have grad_fn, cannot do actions.backward()
 
-        action = T.tanh(actions)*T.tensor(self.max_action).to(self.device).float()  # 1. scale action to fit the environment
-                                    # 2. action casted to float so that can be used by T.cat, otherwise it is double type
-        log_probs = probabilities.log_prob(actions)             # to calculate the loss function
-        log_probs -= T.log(1-action.pow(2)+self.reparam_noise)  # handle the scaling of action (as we use tanh to scale)
-        log_probs = log_probs.sum(1, keepdim=True)   # 0-axis: batch, 1-axis: components of actions, summed over to get a scalar
+        # 1. scale action to fit the environment
+        action = T.tanh(actions) * \
+            T.tensor(self.max_action).to(self.device).float()
+        # 2. action casted to float so that can be used by T.cat, otherwise it is double type
+        # to calculate the loss function
+        log_probs = probabilities.log_prob(actions)
+        # handle the scaling of action (as we use tanh to scale)
+        log_probs -= T.log(1-action.pow(2)+self.reparam_noise)
+        # 0-axis: batch, 1-axis: components of actions, summed over to get a scalar
+        log_probs = log_probs.sum(1, keepdim=True)
 
         return action, log_probs
 
-    def save_checkpoint(self):
-        T.save(self.state_dict(), self.checkpoint_file)
+    def save_checkpoint(self, modelName):
+        T.save(self.state_dict(), self.checkpoint_file + modelName)
 
-    def load_checkpoint(self):
-        self.load_state_dict(T.load(self.checkpoint_file))
+    def load_checkpoint(self, modelName):
+        self.load_state_dict(T.load(self.checkpoint_file + modelName))
 
 
 class Agent():
-    def __init__(self, env, 
-            act_lr=0.00003, crt_lr=0.0003, gamma=0.99, max_size=1000000, tau=0.005,
-            layer1_size=256, layer2_size=256, batch_size=64, reward_scale=1):
+    def __init__(self, env,
+                 act_lr=0.00003, crt_lr=0.0003, gamma=0.99, max_size=1000000, tau=0.005,
+                 layer1_size=256, layer2_size=256, batch_size=64, reward_scale=1):
         '''Higher reward scale means higher weights given to rewards ratehr than entropy'''
         self.gamma = gamma
         self.tau = tau
         self.batch_size = batch_size
         self.input_dims = env.observation_space.shape[0]
         self.n_actions = env.action_space.shape[0]
-        self.max_action = np.ones(self.n_actions) # The env action was scaled to [-1, 1],
-                            # Cannot use env.action_space.high, because env.action_space.high is not real action space
+        # The env action was scaled to [-1, 1],
+        self.max_action = np.ones(self.n_actions)
+        # Cannot use env.action_space.high, because env.action_space.high is not real action space
 
         self.memory = ReplayBuffer(max_size, self.input_dims, self.n_actions)
         self.actor = ActorNetwork(act_lr, self.input_dims, self.n_actions,
-                    name='actor', max_action=self.max_action)
+                                  name='actor', max_action=self.max_action)
         self.critic_1 = CriticNetwork(crt_lr, self.input_dims, self.n_actions,
-                    name='critic_1')
+                                      name='critic_1')
         self.critic_2 = CriticNetwork(crt_lr, self.input_dims, self.n_actions,
-                    name='critic_2')
+                                      name='critic_2')
         self.value = ValueNetwork(crt_lr, self.input_dims, name='value')
-        self.target_value = ValueNetwork(crt_lr, self.input_dims, name='target_value')
+        self.target_value = ValueNetwork(
+            crt_lr, self.input_dims, name='target_value')
 
         self.scale = reward_scale
         self.update_network_parameters(tau=1)
@@ -229,31 +240,31 @@ class Agent():
         updated_value = update_single_target_network_parameters(
             self.value, self.target_value, tau
         )
-        
+
         self.target_value.load_state_dict(updated_value)
 
-    def save_models(self):
+    def save_models(self, modelName):
         print('.... saving models ....')
-        self.actor.save_checkpoint()
-        self.value.save_checkpoint()
-        self.target_value.save_checkpoint()
-        self.critic_1.save_checkpoint()
-        self.critic_2.save_checkpoint()
+        self.actor.save_checkpoint(modelName)
+        self.value.save_checkpoint(modelName)
+        self.target_value.save_checkpoint(modelName)
+        self.critic_1.save_checkpoint(modelName)
+        self.critic_2.save_checkpoint(modelName)
 
-    def load_models(self):
+    def load_models(self, modelName):
         print('.... loading models ....')
-        self.actor.load_checkpoint()
-        self.value.load_checkpoint()
-        self.target_value.load_checkpoint()
-        self.critic_1.load_checkpoint()
-        self.critic_2.load_checkpoint()
+        self.actor.load_checkpoint(modelName)
+        self.value.load_checkpoint(modelName)
+        self.target_value.load_checkpoint(modelName)
+        self.critic_1.load_checkpoint(modelName)
+        self.critic_2.load_checkpoint(modelName)
 
     def learn(self):
         if self.memory.mem_cntr < self.batch_size:
             return
 
         state, action, reward, new_state, done = \
-                self.memory.sample_buffer(self.batch_size)
+            self.memory.sample_buffer(self.batch_size)
 
         reward = T.tensor(reward, dtype=T.float).to(self.actor.device)
         done = T.tensor(done).to(self.actor.device)
@@ -263,12 +274,14 @@ class Agent():
 
         # Update the value network
         self.value.optimizer.zero_grad()
-        
+
         value = self.value.forward(state).view(-1)
 
-        actions, log_probs = self.actor.sample_normal(state, reparameterize=False)
+        actions, log_probs = self.actor.sample_normal(
+            state, reparameterize=False)
         log_probs = log_probs.view(-1)
-        q1_new_policy = self.critic_1.forward(state, actions).view(-1)   # Use the action from the current policy, rather than the one stored in the buffer
+        # Use the action from the current policy, rather than the one stored in the buffer
+        q1_new_policy = self.critic_1.forward(state, actions).view(-1)
         q2_new_policy = self.critic_2.forward(state, actions).view(-1)
         critic_value = T.min(q1_new_policy, q2_new_policy)
         value_target = critic_value - log_probs   # - log_probs is entropy
@@ -280,10 +293,11 @@ class Agent():
         # Update the critic network
         self.critic_1.optimizer.zero_grad()
         self.critic_2.optimizer.zero_grad()
-        
-        q1_old_policy = self.critic_1.forward(state, action).view(-1)  # action and state are from replay buffer generated by old policy
-        q2_old_policy = self.critic_2.forward(state, action).view(-1)        
-        
+
+        # action and state are from replay buffer generated by old policy
+        q1_old_policy = self.critic_1.forward(state, action).view(-1)
+        q2_old_policy = self.critic_2.forward(state, action).view(-1)
+
         value_ = self.target_value.forward(state_).view(-1)
         # value_[done] = 0.0    # In building context, terminal state does not have 0 value
         q_hat = self.scale*reward + self.gamma*value_
@@ -298,12 +312,14 @@ class Agent():
         # Update the actor network
         self.actor.optimizer.zero_grad()
 
-        actions, log_probs = self.actor.sample_normal(state, reparameterize=True)
+        actions, log_probs = self.actor.sample_normal(
+            state, reparameterize=True)
         log_probs = log_probs.view(-1)
-        q1_new_policy = self.critic_1.forward(state, actions).view(-1)    # Use the action from the current policy, rather than the one stored in the buffer
+        # Use the action from the current policy, rather than the one stored in the buffer
+        q1_new_policy = self.critic_1.forward(state, actions).view(-1)
         q2_new_policy = self.critic_2.forward(state, actions).view(-1)
         critic_value = T.min(q1_new_policy, q2_new_policy)
-        
+
         actor_loss = log_probs - critic_value
         actor_loss = T.mean(actor_loss)
         actor_loss.backward(retain_graph=True)
