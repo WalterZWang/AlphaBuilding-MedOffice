@@ -4,32 +4,28 @@ import os
 
 from tensorboardX import SummaryWriter
 
-def train(algorithm, env, seed, runName):
+
+def train(algorithm, env, seed, save_path):
 
     if algorithm == 'ddpg':
         from ddpg_util import Agent
-        agent = Agent(env, act_lr=0.000025, crt_lr=0.00025, tau=0.001, 
-                    batch_size=64,  layer1_size=400, layer2_size=300)
+        agent = Agent(env, act_lr=0.000025, crt_lr=0.00025, tau=0.001,
+                      batch_size=64,  layer1_size=400, layer2_size=300)
     elif algorithm == 'sac':
         from sac_util import Agent
         agent = Agent(env, reward_scale=3)
     elif algorithm == 'td3':
         from td3_util import Agent
-        agent = Agent(env, act_lr=0.000025, crt_lr=0.00025, tau=0.001, 
-                    batch_size=64,  layer1_size=256, layer2_size=256)
+        agent = Agent(env, act_lr=0.000025, crt_lr=0.00025, tau=0.001,
+                      batch_size=64,  layer1_size=256, layer2_size=256)
 
-    RunName = '{}_{}_run{}'.format(runName, algorithm, seed)
-    
-    # initiate log file and tensorboard writer
-    save_path = os.path.join("log")
-    if not os.path.exists(save_path):
-        os.makedirs(save_path)
+    RunName = '{}_run{}'.format(algorithm, seed)
 
-    writer = SummaryWriter(comment = RunName)
+    writer = SummaryWriter(comment=RunName)
     np.random.seed(seed)
 
-    with open(os.path.join(save_path,"{0}.log".format(RunName)), "a") as f:
-        #agent.load_models()
+    with open(os.path.join(save_path, "{0}.log".format(RunName)), "a") as f:
+        # agent.load_models()
 
         best_score = np.NINF
         load_checkpoint = False    # load the model and test, not learn
@@ -43,7 +39,7 @@ def train(algorithm, env, seed, runName):
         if load_checkpoint:
             agent.load_models()
 
-        for episode in range(22):
+        for episode in range(21):
             obs = env.reset()
             done = False
             total_reward = 0
@@ -69,7 +65,7 @@ def train(algorithm, env, seed, runName):
                         total_uncDegHour += uncDegHour
                         total_crt_loss += crt_loss
                         total_act_loss += act_loss
-                
+
                 obs = new_state
 
             total_reward_history.append(total_reward)
@@ -79,35 +75,42 @@ def train(algorithm, env, seed, runName):
             total_crt_loss_history.append(total_crt_loss)
             total_act_loss_history.append(total_act_loss)
 
-            f.write("%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n"%(episode,total_reward,total_energy,
-                         total_comfort,total_uncDegHour,total_crt_loss,total_act_loss))
+            f.write("%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n" % (episode, total_reward, total_energy,
+                                                            total_comfort, total_uncDegHour, total_crt_loss, total_act_loss))
+            total_uncDegHour = total_uncDegHour/(9*8760*4*(5/7)*(14/24))
             writer.add_scalar("reward", total_reward, episode)
-            writer.add_scalar("energy",total_energy, episode)
-            writer.add_scalar("comfort",total_comfort, episode)
-            writer.add_scalar("uncDegHour",total_uncDegHour/(9*8760*4*(5/7)*(14/24)), episode)
-            writer.add_scalar("crt_loss",total_crt_loss, episode)
-            writer.add_scalar("act_loss",total_act_loss, episode)       
+            writer.add_scalar("energy", total_energy, episode)
+            writer.add_scalar("comfort", total_comfort, episode)
+            writer.add_scalar("uncDegHour", total_uncDegHour, episode)
+            writer.add_scalar("crt_loss", total_crt_loss, episode)
+            writer.add_scalar("act_loss", total_act_loss, episode)
 
-            avg_score = np.mean(total_reward_history[-10:])   # score is the total reward of 1 episode
+            # score is the total reward of 1 episode
+            avg_score = np.mean(total_reward_history[-10:])
             if avg_score > best_score:
                 best_score = avg_score
                 if not load_checkpoint:
-                    agent.save_models()
+                    agent.save_models(RunName)
 
             print('episode ', episode, 'score %.2f' % total_reward,
                   'trailing 10 games avg %.3f' % avg_score)
 
+
 if __name__ == "__main__":
 
-    algorithm = 'ddpg'
-    seed = 10
-    runName = 'occ'
-    env = medOff_env.MedOffEnv(building_path = 'gym_AlphaBuilding/fmuModel/v1_fmu.fmu',
-                               sim_days = 365,
-                               step_size = 900,
-                               sim_year = 2015,
-                               tz_name = 'America/Los_Angeles',
-                               occupied_hour = (6, 20),
-                               weight_reward = (0.2, 0.01))
+    # initiate log file and tensorboard writer
+    save_path = os.path.join("log", "exp3-higherComfortWeight")
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
 
-    train(algorithm, env, seed, runName)
+    algorithm = 'ddpg'
+    env = medOff_env.MedOffEnv(building_path='gym_AlphaBuilding/fmuModel/v1_fmu.fmu',
+                               sim_days=365,
+                               step_size=900,
+                               sim_year=2015,
+                               tz_name='America/Los_Angeles',
+                               occupied_hour=(6, 20),
+                               weight_reward=(0.1, 0.01))
+
+    for seed in range(1, 11):
+        train(algorithm, env, seed, save_path)

@@ -7,6 +7,7 @@ import numpy as np
 
 from util import ReplayBuffer, update_single_target_network_parameters, weights_init_normal
 
+
 class OUActionNoise(object):
     def __init__(self, mu, sigma=0.15, theta=.2, dt=1e-2, x0=None):
         self.theta = theta
@@ -18,16 +19,19 @@ class OUActionNoise(object):
 
     def __call__(self):
         x = self.x_prev + self.theta * (self.mu - self.x_prev) * self.dt + \
-            self.sigma * np.sqrt(self.dt) * np.random.normal(size=self.mu.shape)
+            self.sigma * np.sqrt(self.dt) * \
+            np.random.normal(size=self.mu.shape)
         self.x_prev = x
         return x
 
     def reset(self):
-        self.x_prev = self.x0 if self.x0 is not None else np.zeros_like(self.mu)
+        self.x_prev = self.x0 if self.x0 is not None else np.zeros_like(
+            self.mu)
 
     def __repr__(self):
         return 'OrnsteinUhlenbeckActionNoise(mu={}, sigma={})'.format(
-                                                            self.mu, self.sigma)
+            self.mu, self.sigma)
+
 
 class CriticNetwork(nn.Module):
     def __init__(self, lr, input_dims, n_actions, fc1_dims, fc2_dims, name,
@@ -37,7 +41,7 @@ class CriticNetwork(nn.Module):
         self.n_actions = n_actions
         self.fc1_dims = fc1_dims
         self.fc2_dims = fc2_dims
-        self.checkpoint_file = os.path.join(chkpt_dir,name+'_ddpg')
+        self.checkpoint_file = os.path.join(chkpt_dir, name+'_ddpg')
         self.device = device
 
         self.fc1 = nn.Linear(self.input_dims, self.fc1_dims)
@@ -53,7 +57,7 @@ class CriticNetwork(nn.Module):
         self.bn2 = nn.LayerNorm(self.fc2_dims)
 
         self.action_value = nn.Linear(self.n_actions, self.fc2_dims)
-        
+
         f3 = 0.003
         self.q = nn.Linear(self.fc2_dims, 1)
         T.nn.init.uniform_(self.q.weight.data, -f3, f3)
@@ -77,11 +81,12 @@ class CriticNetwork(nn.Module):
 
         return state_action_value
 
-    def save_checkpoint(self):
-        T.save(self.state_dict(), self.checkpoint_file)
+    def save_checkpoint(self, modelName):
+        T.save(self.state_dict(), self.checkpoint_file + modelName)
 
-    def load_checkpoint(self):
-        self.load_state_dict(T.load(self.checkpoint_file))
+    def load_checkpoint(self, modelName):
+        self.load_state_dict(T.load(self.checkpoint_file + modelName))
+
 
 class ActorNetwork(nn.Module):
     def __init__(self, lr, input_dims, n_actions, fc1_dims, fc2_dims, name,
@@ -91,7 +96,7 @@ class ActorNetwork(nn.Module):
         self.n_actions = n_actions
         self.fc1_dims = fc1_dims
         self.fc2_dims = fc2_dims
-        self.checkpoint_file = os.path.join(chkpt_dir,name+'_ddpg')
+        self.checkpoint_file = os.path.join(chkpt_dir, name+'_ddpg')
         self.device = device
 
         self.fc1 = nn.Linear(self.input_dims, self.fc1_dims)
@@ -127,15 +132,16 @@ class ActorNetwork(nn.Module):
 
         return x
 
-    def save_checkpoint(self):
-        T.save(self.state_dict(), self.checkpoint_file)
+    def save_checkpoint(self, modelName):
+        T.save(self.state_dict(), self.checkpoint_file + modelName)
 
-    def load_checkpoint(self):
-        self.load_state_dict(T.load(self.checkpoint_file))
+    def load_checkpoint(self, modelName):
+        self.load_state_dict(T.load(self.checkpoint_file + modelName))
+
 
 class Agent(object):
     def __init__(self, env, act_lr, crt_lr, tau,
-                 gamma=0.99, max_size=1000000, batch_size=64, 
+                 gamma=0.99, max_size=1000000, batch_size=64,
                  layer1_size=400, layer2_size=300):
         self.input_dims = env.observation_space.shape[0]
         self.n_actions = env.action_space.shape[0]
@@ -146,7 +152,7 @@ class Agent(object):
 
         self.actor = ActorNetwork(act_lr, self.input_dims, self.n_actions,
                                   layer1_size, layer2_size, name='Actor')
-        self.critic = CriticNetwork(crt_lr, self.input_dims, self.n_actions, 
+        self.critic = CriticNetwork(crt_lr, self.input_dims, self.n_actions,
                                     layer1_size, layer2_size, name='Critic')
 
         self.target_actor = ActorNetwork(act_lr, self.input_dims, self.n_actions,
@@ -160,7 +166,8 @@ class Agent(object):
 
     def choose_action(self, observation):
         self.actor.eval()
-        observation = T.tensor(observation, dtype=T.float).to(self.actor.device)
+        observation = T.tensor(
+            observation, dtype=T.float).to(self.actor.device)
         mu = self.actor.forward(observation).to(self.actor.device)
         mu_prime = mu + T.tensor(self.noise(),
                                  dtype=T.float).to(self.actor.device)
@@ -174,7 +181,7 @@ class Agent(object):
         if self.memory.mem_cntr < self.batch_size:
             return
         state, action, reward, new_state, done = \
-                                    self.memory.sample_buffer(self.batch_size)
+            self.memory.sample_buffer(self.batch_size)
 
         reward = T.tensor(reward, dtype=T.float).to(self.critic.device)
         # done = T.tensor(done).to(self.critic.device)
@@ -186,7 +193,8 @@ class Agent(object):
         self.target_critic.eval()
         self.critic.eval()
         target_actions = self.target_actor.forward(new_state)
-        critic_value_ = self.target_critic.forward(new_state, target_actions).view(-1)
+        critic_value_ = self.target_critic.forward(
+            new_state, target_actions).view(-1)
         # critic_value_[done] = 0.0    # In building context, terminal state does not have value of 0
         critic_value = self.critic.forward(state, action).view(-1)
 
@@ -217,24 +225,24 @@ class Agent(object):
 
         updated_actor = update_single_target_network_parameters(
             self.actor, self.target_actor, tau
-            )
+        )
         updated_critic = update_single_target_network_parameters(
             self.critic, self.target_critic, tau
         )
-        
+
         self.target_actor.load_state_dict(updated_actor)
         self.target_critic.load_state_dict(updated_critic)
 
-    def save_models(self):
+    def save_models(self, modelName):
         print('.... saving models ....')
-        self.actor.save_checkpoint()
-        self.target_actor.save_checkpoint()
-        self.critic.save_checkpoint()
-        self.target_critic.save_checkpoint()
+        self.actor.save_checkpoint(modelName)
+        self.target_actor.save_checkpoint(modelName)
+        self.critic.save_checkpoint(modelName)
+        self.target_critic.save_checkpoint(modelName)
 
-    def load_models(self):
+    def load_models(self, modelName):
         print('.... loading models ....')
-        self.actor.load_checkpoint()
-        self.target_actor.load_checkpoint()
-        self.critic.load_checkpoint()
-        self.target_critic.load_checkpoint()
+        self.actor.load_checkpoint(modelName)
+        self.target_actor.load_checkpoint(modelName)
+        self.critic.load_checkpoint(modelName)
+        self.target_critic.load_checkpoint(modelName)
