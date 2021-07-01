@@ -42,12 +42,15 @@ def test(test_algorithm, env):
         act = env.rescale_action(act)
         
         result = np.append(new_state, act)
+        result = np.concatenate((new_state, act, comments, np.array([reward])))
+
         result_all.append(result)
 
         obs = new_state
     
     result_all = pd.DataFrame(result_all)
-    result_all.columns = env.states_time + env.states_amb + env.states_temp + env.action_names
+    result_all.columns = env.states_time + env.states_amb + env.states_temp + env.action_names + \
+        ['cost_energy', 'cost_comfort', 'temp_min', 'temp_max', 'UDH'] + ['reward']
     
     result_all.round(decimals=2)
     result_all.to_csv('log/{}_test.csv'.format(test_algorithm))
