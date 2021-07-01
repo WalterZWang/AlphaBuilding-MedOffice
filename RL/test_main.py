@@ -38,6 +38,9 @@ def test(test_algorithm, env):
             act = agent.actor.forward(obs).to(agent.actor.device).detach().numpy()      
 
         new_state, reward, done, comments = env.step(act)
+        new_state = env.rescale_state(new_state)
+        act = env.rescale_action(act)
+        
         result = np.append(new_state, act)
         result_all.append(result)
 
@@ -47,11 +50,9 @@ def test(test_algorithm, env):
     result_all.columns = env.states_time + env.states_amb + env.states_temp + env.action_names
     
     result_all.round(decimals=2)
-    result_all.to_csv('log/{}_test_csv'.format(test_algorithm))
+    result_all.to_csv('log/{}_test.csv'.format(test_algorithm))
 
 if __name__ == "__main__":
-
-    test_algorithm = 'sac'
 
     env = medOff_env.MedOffEnv(building_path = 'gym_AlphaBuilding/fmuModel/v1_fmu.fmu',
                                sim_days = 365,
@@ -61,4 +62,5 @@ if __name__ == "__main__":
                                occupied_hour = (6, 20),
                                weight_reward = (0.2, 0.01))
 
-    test(test_algorithm, env)
+    for test_algorithm in ['ddpg', 'sac', 'td3']:
+        test(test_algorithm, env)
