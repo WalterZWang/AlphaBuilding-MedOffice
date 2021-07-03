@@ -59,7 +59,7 @@ def train(algorithm, env, seed, save_path):
                     if loss:
                         crt_loss, act_loss = loss
                         # Book keeping
-                        energy, comfort, temp_min, temp_max, uncDegHour = comments
+                        energy, comfort, temp_min, temp_max, uncDegHour, fanE, coolE, heatE = comments
                         total_energy += energy
                         total_comfort += comfort
                         total_uncDegHour += uncDegHour
@@ -109,5 +109,5 @@ if __name__ == "__main__":
                                step_size=900,
                                sim_year=2015)
 
-    for seed in range(1, 11):
+    for seed in range(1, 3):
         train(algorithm, env, seed, save_path)
