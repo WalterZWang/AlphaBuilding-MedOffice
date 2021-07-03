@@ -52,7 +52,8 @@ def test(test_algorithm, actor_path, save_path, env):
 
     result_all = pd.DataFrame(result_all)
     result_all.columns = env.states_time + env.states_amb + env.states_temp + env.action_names + \
-        ['cost_energy', 'cost_comfort', 'temp_min', 'temp_max', 'UDH'] + ['reward']
+        ['cost_energy', 'cost_comfort', 'temp_min', 'temp_max', 'UDH',
+            'fanEnergy', 'coolEnergy', 'heatEnergy'] + ['reward']
 
     result_all.round(decimals=2)
     result_all.to_csv('{}_test.csv'.format(save_path))

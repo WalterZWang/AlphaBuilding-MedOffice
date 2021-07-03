@@ -179,7 +179,7 @@ class MedOffEnv(Env):
                 (np.array([hourOfDay, dayOfWeek]), state_raw))
 
             # calculate the rewards from the observation, reheat of the current time step is in action_raw
-            reward, energy, comfort, temp_min, temp_max, uncDegHour = self._compute_reward(
+            reward, energy, comfort, temp_min, temp_max, uncDegHour, fanE, coolE, heatE = self._compute_reward(
                 obs_all_raw, time_current, action_raw, 22, self.weight_reward, self.occupied_hour)
 
             if self.time_step_idx < (self.n_steps - 1):
@@ -190,7 +190,7 @@ class MedOffEnv(Env):
                 self.time_step_idx = 0
 
         state_scaled = self.scale_state(state_raw)
-        return state_scaled, reward, done, (energy, comfort, temp_min, temp_max, uncDegHour)
+        return state_scaled, reward, done, (energy, comfort, temp_min, temp_max, uncDegHour, fanE, coolE, heatE)
 
     def rescale_state(self, states_scaled):
         '''
@@ -258,8 +258,10 @@ class MedOffEnv(Env):
         uncDegHour: uncomfortable degree hours
         '''
         # energy cost
-        ahu_energy = (obs[12] + obs[13] + obs[14]*0.4) / \
-            3600000    # unit:J -> kWh
+        fanE = obs[12] / 3600000
+        coolE = obs[13] / 3600000
+        heatE = (obs[14]*0.4) / 3600000
+        ahu_energy = fanE + coolE + heatE    # unit:J -> kWh
         reheat_energy = (act[2] + act[4] + act[6] + act[8] + act[10] +
                          act[12] + act[14] + act[16] + act[18])/(1000*4)   # unit:kWh, W->kW, 15min per timestep, -> h
         cost_energy = ahu_energy + reheat_energy
@@ -297,7 +299,8 @@ class MedOffEnv(Env):
         print("Zone temperature range (degC): {0} ~ {1}".format(
               zone_temp_min, zone_temp_max))
 
-        return reward_t, cost_energy, cost_comfort, zone_temp_min, zone_temp_max, uncDegHour
+        return reward_t, cost_energy, cost_comfort, zone_temp_min, zone_temp_max, uncDegHour,\
+            fanE, coolE, heatE
 
 
 def time_converter(year, idx, total_timestep=35040):
