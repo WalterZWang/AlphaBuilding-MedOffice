@@ -107,10 +107,7 @@ if __name__ == "__main__":
     env = medOff_env.MedOffEnv(building_path='gym_AlphaBuilding/fmuModel/v1_fmu.fmu',
                                sim_days=365,
                                step_size=900,
-                               sim_year=2015,
-                               tz_name='America/Los_Angeles',
-                               occupied_hour=(6, 20),
-                               weight_reward=(0.1, 0.01))
+                               sim_year=2015)
 
     for seed in range(1, 11):
         train(algorithm, env, seed, save_path)

@@ -27,7 +27,7 @@ class MedOffEnv(Env):
     - tz_name: string, the name of the time zone, this is to create the time index, example - 'America/Los_Angeles',
     - occupied_hour: tuple, occupied hours, the weights of comfort will be higher to calculate the rewards for the occupied hours,
         example - (6, 20),
-    - weight_reward: tuple, the weight of comfort over energy to calculate the reward, example - (0.2, 0.002)
+    - weight_reward: tuple, the weight of comfort over energy to calculate the reward, example - (0.2, 0.02)
     - eprice_path: string, the path to the electricity price, currently not used in this version,
 
     Action space:
@@ -40,6 +40,23 @@ class MedOffEnv(Env):
         - obs[0:2]: time - hour of day (0-23), and day of week (0-6, 5 and 6 are weekends)
         - obs[2:5]: ambient weather - temperature, solar radiation, relative humidity
         - obs[5:12]: indoor temperature - for the 2 conference rooms, 3 enclosed offices, and 4 open offices respectively
+
+    Rewards:
+    Weighted sum of
+    - Energy
+        - AHU Energy
+            - Fan Energy: from E+ "21 Zone PVAV Fan,Fan Electric Energy", Unit [J](TimeStep)
+            - Cooling Energy: from E+ "21 ZONE PVAV,Air System DX Cooling Coil Electric Energy", Unit [J](TimeStep)
+            - Heating Energy: from E+ "21 ZONE PVAV MAIN GAS HTG COIL,Heating Coil Gas Energy", Unit [J](TimeStep)
+                Weight is 0.4 of heatEnergy, because conversion from Gas to Electricity is 0.4, based on gas generator
+        - Terminal reheat
+            - Implemented as E+ "*_ZN_Reheat" (example "EnclosedOffice_Mid_1")
+                Weight is 1, as terminal reheat are usually eletrical heater
+    - Comfort
+        - Mean Square Error from the setpoint
+            Weight of each thermal zone is based on the number of occupants in that zone
+            Designed occupant counts in each zone can be found in docs/zone_summary.xlsx
+    - The weight for energy and comfort is an input from the users  
     """
     metadata = {'render.modes': ['human']}
 
@@ -50,7 +67,7 @@ class MedOffEnv(Env):
                  sim_year=2015,
                  tz_name='America/Los_Angeles',
                  occupied_hour=(6, 20),
-                 weight_reward=(0.1, 0.01),
+                 weight_reward=(0.5, 0.05),
                  eprice_path=None):
 
         # load fmu models
@@ -220,7 +237,7 @@ class MedOffEnv(Env):
 
     def _compute_reward(self, obs, time, act, T_set, weight,
                         occupied_hour, comfort_tol=2,
-                        zone_weight=[23, 23, 6, 6, 3, 11, 12, 10, 10]):
+                        zone_weight=[23, 23, 6, 6, 6, 11, 12, 10, 10]):
         '''
         Similar function to the compute_reward method in analysis/utils.py
         Difference is: 1. one more output - energy
@@ -241,7 +258,8 @@ class MedOffEnv(Env):
         uncDegHour: uncomfortable degree hours
         '''
         # energy cost
-        ahu_energy = (obs[12] + obs[13] + obs[14])/3600000    # unit:kWh
+        ahu_energy = (obs[12] + obs[13] + obs[14]*0.4) / \
+            3600000    # unit:J -> kWh
         reheat_energy = (act[2] + act[4] + act[6] + act[8] + act[10] +
                          act[12] + act[14] + act[16] + act[18])/(1000*4)   # unit:kWh, W->kW, 15min per timestep, -> h
         cost_energy = ahu_energy + reheat_energy
