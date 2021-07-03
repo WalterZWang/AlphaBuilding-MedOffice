@@ -33,7 +33,7 @@ class CriticNetwork(nn.Module):
         self.n_actions = n_actions
         self.name = name
         self.checkpoint_dir = chkpt_dir
-        self.checkpoint_file = os.path.join(self.checkpoint_dir, name+'_td3')
+        self.checkpoint_file = os.path.join(self.checkpoint_dir, name+'_')
 
         self.critic = nn.Sequential(
             nn.Linear(self.input_dims + n_actions, self.fc1_dims),
