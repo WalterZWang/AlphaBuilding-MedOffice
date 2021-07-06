@@ -96,7 +96,7 @@ class ActorNetwork(nn.Module):
         self.n_actions = n_actions
         self.fc1_dims = fc1_dims
         self.fc2_dims = fc2_dims
-        self.checkpoint_file = os.path.join(chkpt_dir, name+'_ddpg')
+        self.checkpoint_file = os.path.join(chkpt_dir, name+'_')
         self.device = device
 
         self.fc1 = nn.Linear(self.input_dims, self.fc1_dims)

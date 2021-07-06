@@ -24,7 +24,7 @@ class CriticNetwork(nn.Module):
         self.fc2_dims = fc2_dims
         self.name = name
         self.checkpoint_dir = chkpt_dir
-        self.checkpoint_file = os.path.join(self.checkpoint_dir, name+'_sac')
+        self.checkpoint_file = os.path.join(self.checkpoint_dir, name+'_')
 
         self.critic = nn.Sequential(
             nn.Linear(self.input_dims+self.n_actions, self.fc1_dims),
@@ -124,7 +124,7 @@ class ActorNetwork(nn.Module):
         self.n_actions = n_actions
         self.name = name
         self.checkpoint_dir = chkpt_dir
-        self.checkpoint_file = os.path.join(self.checkpoint_dir, name+'_sac')
+        self.checkpoint_file = os.path.join(self.checkpoint_dir, name+'_')
         self.max_action = max_action
         self.reparam_noise = 1e-6
 

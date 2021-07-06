@@ -67,7 +67,7 @@ if __name__ == "__main__":
                                sim_year=2015)
 
     test_algorithm = 'ddpg'
-    runName = test_algorithm+'_run1'
+    runName = test_algorithm+'_run2'
     actor_path = os.path.join(
         'tmp', test_algorithm, 'Actor_'+runName)
     save_path = os.path.join(
