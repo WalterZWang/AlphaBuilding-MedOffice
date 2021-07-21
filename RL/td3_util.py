@@ -125,13 +125,14 @@ class ActorNetwork(nn.Module):
 
 
 class Agent():
-    def __init__(self, env, act_lr, crt_lr, tau,
+    def __init__(self, input_dims, n_actions,
+                 act_lr, crt_lr, tau,
                  gamma=0.99, max_size=1000000, batch_size=64,
                  layer1_size=256, layer2_size=256,
                  update_actor_interval=2,
                  noise=0.1, noise_targetAct=0.2):
-        self.input_dims = env.observation_space.shape[0]
-        self.n_actions = env.action_space.shape[0]
+        self.input_dims = input_dims
+        self.n_actions = n_actions
         self.gamma = gamma
         self.tau = tau
         self.max_action = 1

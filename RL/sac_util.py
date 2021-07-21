@@ -197,15 +197,15 @@ class ActorNetwork(nn.Module):
 
 
 class Agent():
-    def __init__(self, env,
+    def __init__(self, input_dims, n_actions,
                  act_lr=0.00003, crt_lr=0.0003, gamma=0.99, max_size=1000000, tau=0.005,
                  layer1_size=256, layer2_size=256, batch_size=64, reward_scale=1):
         '''Higher reward scale means higher weights given to rewards ratehr than entropy'''
         self.gamma = gamma
         self.tau = tau
         self.batch_size = batch_size
-        self.input_dims = env.observation_space.shape[0]
-        self.n_actions = env.action_space.shape[0]
+        self.input_dims = input_dims
+        self.n_actions = n_actions
         # The env action was scaled to [-1, 1],
         self.max_action = np.ones(self.n_actions)
         # Cannot use env.action_space.high, because env.action_space.high is not real action space

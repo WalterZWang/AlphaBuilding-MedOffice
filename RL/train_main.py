@@ -7,16 +7,19 @@ from tensorboardX import SummaryWriter
 
 def train(algorithm, env, seed, save_path):
 
+    input_dims = env.observation_space.shape[0]
+    n_actions = env.action_space.shape[0]
+
     if algorithm == 'ddpg':
         from ddpg_util import Agent
-        agent = Agent(env, act_lr=0.000025, crt_lr=0.00025, tau=0.001,
+        agent = Agent(input_dims, n_actions, act_lr=0.000025, crt_lr=0.00025, tau=0.001,
                       batch_size=64,  layer1_size=400, layer2_size=300)
     elif algorithm == 'sac':
         from sac_util import Agent
-        agent = Agent(env, reward_scale=3)
+        agent = Agent(input_dims, n_actions, reward_scale=3)
     elif algorithm == 'td3':
         from td3_util import Agent
-        agent = Agent(env, act_lr=0.000025, crt_lr=0.00025, tau=0.001,
+        agent = Agent(input_dims, n_actions, act_lr=0.000025, crt_lr=0.00025, tau=0.001,
                       batch_size=64,  layer1_size=256, layer2_size=256)
 
     RunName = '{}_run{}'.format(algorithm, seed)

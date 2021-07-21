@@ -68,12 +68,14 @@ class MedOffEnv(Env):
                  tz_name='America/Los_Angeles',
                  occupied_hour=(6, 20),
                  weight_reward=(0.5, 0.05),
+                 fmu_on=True,
                  eprice_path=None):
 
         # load fmu models
         self.building_path = building_path
-        self.building_model = load_fmu(
-            self.building_path, kind='cs', log_level=0)
+        if fmu_on:
+            self.building_model = load_fmu(
+                self.building_path, kind='cs', log_level=0)
         self.occupied_hour = occupied_hour
         self.weight_reward = weight_reward
 

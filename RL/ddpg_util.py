@@ -140,11 +140,11 @@ class ActorNetwork(nn.Module):
 
 
 class Agent(object):
-    def __init__(self, env, act_lr, crt_lr, tau,
+    def __init__(self, input_dims, n_actions, act_lr, crt_lr, tau,
                  gamma=0.99, max_size=1000000, batch_size=64,
                  layer1_size=400, layer2_size=300):
-        self.input_dims = env.observation_space.shape[0]
-        self.n_actions = env.action_space.shape[0]
+        self.input_dims = input_dims
+        self.n_actions = n_actions
         self.gamma = gamma   # discount factor
         self.tau = tau       # target network updating weight
         self.memory = ReplayBuffer(max_size, self.input_dims, self.n_actions)
