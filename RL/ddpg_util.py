@@ -189,27 +189,28 @@ class Agent(object):
         action = T.tensor(action, dtype=T.float).to(self.critic.device)
         state = T.tensor(state, dtype=T.float).to(self.critic.device)
 
+        # calculate target
         self.target_actor.eval()
         self.target_critic.eval()
-        self.critic.eval()
         target_actions = self.target_actor.forward(new_state)
         critic_value_ = self.target_critic.forward(
             new_state, target_actions).view(-1)
         # critic_value_[done] = 0.0    # In building context, terminal state does not have value of 0
-        critic_value = self.critic.forward(state, action).view(-1)
-
         target = reward + self.gamma*critic_value_
 
+        # train critic
         self.critic.train()
         self.critic.optimizer.zero_grad()
+        critic_value = self.critic.forward(state, action).view(-1)
         critic_loss = F.mse_loss(target, critic_value)
         critic_loss.backward()
         self.critic.optimizer.step()
 
+        # train actor
         self.critic.eval()
+        self.actor.train()
         self.actor.optimizer.zero_grad()
         mu = self.actor.forward(state)
-        self.actor.train()
         actor_loss = -self.critic.forward(state, mu)
         actor_loss = T.mean(actor_loss)
         actor_loss.backward()
@@ -236,13 +237,13 @@ class Agent(object):
     def save_models(self, modelName):
         print('.... saving models ....')
         self.actor.save_checkpoint(modelName)
-        self.target_actor.save_checkpoint(modelName)
+        # self.target_actor.save_checkpoint(modelName)
         self.critic.save_checkpoint(modelName)
-        self.target_critic.save_checkpoint(modelName)
+        # self.target_critic.save_checkpoint(modelName)
 
     def load_models(self, modelName):
         print('.... loading models ....')
         self.actor.load_checkpoint(modelName)
-        self.target_actor.load_checkpoint(modelName)
+        # self.target_actor.load_checkpoint(modelName)
         self.critic.load_checkpoint(modelName)
-        self.target_critic.load_checkpoint(modelName)
+        # self.target_critic.load_checkpoint(modelName)

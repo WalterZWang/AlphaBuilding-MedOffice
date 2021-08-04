@@ -1,11 +1,12 @@
 from gym_AlphaBuilding import medOff_env
+from dist_util import vav_obs
 import torch as T
 import pandas as pd
 import numpy as np
 import os
 
 
-def test(test_algorithm, save_path, env):
+def test(test_algorithm, runName, actorName, env):
 
     input_dims = 6  # hour, dayOfWeek, outTemp, solar, \
     # dist from sp (inTemp - sp), ahu sat
@@ -20,7 +21,7 @@ def test(test_algorithm, save_path, env):
                         act_lr=0.000025, crt_lr=0.00025, tau=0.001,
                         batch_size=64,  layer1_size=32, layer2_size=16)
             actor_path = os.path.join(
-                'tmp', test_algorithm, 'Actor_{}vav_{}'.format(runName, vav_index))
+                'tmp', test_algorithm, 'Actor_{}vav_{}'.format(actorName, vav_index))
             vav.actor.load_state_dict(T.load(actor_path))
             vav.actor.eval()
             vavs.append(vav)
@@ -43,7 +44,7 @@ def test(test_algorithm, save_path, env):
     tempSP = 22
     while not done:
         if test_algorithm == 'ddpg':
-            vavs_s, _ = medOff_env.vav_obs(obs, tempSP, ahuSAT, env)
+            vavs_s, _ = vav_obs(obs, tempSP, ahuSAT, env)
             acts = [ahuSAT_scaled]
             for i, vav in enumerate(vavs):
                 vav_s = vavs_s[i]
@@ -78,7 +79,7 @@ def test(test_algorithm, save_path, env):
             'fanEnergy', 'coolEnergy', 'heatEnergy'] + ['reward']
 
     result_all.round(decimals=2)
-    result_all.to_csv('{}_test.csv'.format(save_path))
+    result_all.to_csv('{}_test.csv'.format(runName))
 
 
 if __name__ == "__main__":
@@ -89,13 +90,10 @@ if __name__ == "__main__":
                                sim_year=2015)
 
     test_algorithm = 'ddpg'
-    # runName = test_algorithm+'_vav'
-    runName = 'dist_ddpg'
+    # actorName = test_algorithm+'_vav'
+    actorName = 'dist_ddpg_run1'
     # actor_path = os.path.join(
     #     'tmp', test_algorithm, 'Actor_'+runName)
-    save_path = os.path.join(
-        'log', 'exp4-distVAV', runName)
-    if not os.path.exists(save_path):
-        os.makedirs(save_path)
+    runName = os.path.join('log', 'exp4-distVAV', actorName)
 
-    test(test_algorithm, save_path, env)
+    test(test_algorithm, runName, actorName, env)
