@@ -75,7 +75,7 @@ def gym_simulate(eplus_path, sim_days=365):
         print('Error: Failed to load the fmu')
         quit()
 
-    buffer = ExperienceBuffer(env.obs_names, env.action_names)
+    buffer = ExperienceBuffer(env.env_obs, env.action_names)
 
     for ep in range(2):
         state = env.reset()
