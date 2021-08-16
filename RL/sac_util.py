@@ -11,35 +11,38 @@ import torch.optim as optim
 from torch.distributions.normal import Normal
 import numpy as np
 
-from util import ReplayBuffer, update_single_target_network_parameters, weights_init_normal
+from util import ReplayBuffer, update_single_target_network_parameters, initWB
 
 
 class CriticNetwork(nn.Module):
-    def __init__(self, crt_lr, input_dims, n_actions, fc1_dims=256, fc2_dims=256, init_w=3e-3,
-                 name='critic', chkpt_dir='tmp/sac'):
+    def __init__(self, crt_lr, input_dims, n_actions, fc_dims,
+                 name='critic', chkpt_dir='tmp/sac', layerNorm=True):
         super(CriticNetwork, self).__init__()
         self.input_dims = input_dims
         self.n_actions = n_actions
-        self.fc1_dims = fc1_dims
-        self.fc2_dims = fc2_dims
-        self.name = name
-        self.checkpoint_dir = chkpt_dir
-        self.checkpoint_file = os.path.join(self.checkpoint_dir, name+'_')
+        self.fc_dims = fc_dims
+        self.model_dir = os.path.join(chkpt_dir, name)
+        self.layerNorm=layerNorm
 
-        self.critic = nn.Sequential(
-            nn.Linear(self.input_dims+self.n_actions, self.fc1_dims),
-            nn.ReLU(),
-            nn.Linear(self.fc1_dims, self.fc2_dims),
-            nn.ReLU(),
-            nn.Linear(self.fc2_dims, 1)
-        )
-        self.critic.apply(weights_init_normal)
+        # Fully connected layers
+        self.fcs = nn.ModuleList()
+        self.lns = nn.ModuleList()
+        self.n_fcs = len(self.fc_dims)
+        for fc_i in range(self.n_fcs):
+            # Fully connected layer
+            if fc_i == 0:
+                fc = nn.Linear(self.input_dims+self.n_actions, self.fc_dims[0])
+            else:
+                fc = nn.Linear(self.fc_dims[fc_i-1], self.fc_dims[fc_i])
+            initWB(fc)
+            self.fcs.append(fc)
+            # Layer Normalization over a mini-batch of inputs
+            ln = nn.LayerNorm(self.fc_dims[fc_i])
+            self.lns.append(ln)
 
-        # self.fc1 = nn.Linear(self.input_dims+self.n_actions, self.fc1_dims)
-        # self.fc2 = nn.Linear(self.fc1_dims, self.fc2_dims)
-        # self.q = nn.Linear(self.fc2_dims, 1)
-        # self.q.weight.data.uniform_(-init_w, init_w)
-        # self.q.bias.data.uniform_(-init_w, init_w)
+        # Output layer
+        self.q = nn.Linear(self.fc_dims[-1], 1)
+        initWB(self.q)
 
         self.optimizer = optim.Adam(self.parameters(), lr=crt_lr)
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
@@ -47,49 +50,53 @@ class CriticNetwork(nn.Module):
         self.to(self.device)
 
     def forward(self, state, action):
-        action_value = T.cat([state, action], dim=1)
-        # q_action_value = self.fc1(action_value)
-        # q_action_value = F.relu(q_action_value)
-        # q_action_value = self.fc2(q_action_value)
-        # q_action_value = F.relu(q_action_value)
-        # q = self.q(q_action_value)
+        state_action_value = T.cat([state, action], dim=1)
+        for fc, ln in zip(self.fcs, self.lns):
+            if self.layerNorm:
+                state_action_value = F.relu(ln(fc(state_action_value)))
+            else:
+                state_action_value = F.relu(fc(state_action_value))
 
-        q = self.critic(action_value)
+        q = self.q(state_action_value)
 
         return q
 
-    def save_checkpoint(self, modelName):
-        T.save(self.state_dict(), self.checkpoint_file + modelName)
+    def save_checkpoint(self):
+        T.save(self.state_dict(), self.model_dir)
 
-    def load_checkpoint(self, modelName):
-        self.load_state_dict(T.load(self.checkpoint_file + modelName))
+    def load_checkpoint(self):
+        self.load_state_dict(T.load(self.model_dir))
 
 
 class ValueNetwork(nn.Module):
-    def __init__(self, crt_lr, input_dims, fc1_dims=256, fc2_dims=256, init_w=3e-3,
-                 name='value', chkpt_dir='tmp/sac'):
+    def __init__(self, crt_lr, input_dims, fc_dims,
+                 name='value', chkpt_dir='tmp/sac', layerNorm=True):
         super(ValueNetwork, self).__init__()
         self.input_dims = input_dims
-        self.fc1_dims = fc1_dims
-        self.fc2_dims = fc2_dims
+        self.fc_dims = fc_dims
         self.name = name
-        self.checkpoint_dir = chkpt_dir
-        self.checkpoint_file = os.path.join(self.checkpoint_dir, name+'_')
+        self.model_dir = os.path.join(chkpt_dir, name)
+        self.layerNorm = layerNorm
 
-        self.value = nn.Sequential(
-            nn.Linear(self.input_dims, self.fc1_dims),
-            nn.ReLU(),
-            nn.Linear(self.fc1_dims, fc2_dims),
-            nn.ReLU(),
-            nn.Linear(self.fc2_dims, 1)
-        )
-        self.value.apply(weights_init_normal)
+        # Fully connected layers
+        self.fcs = nn.ModuleList()
+        self.lns = nn.ModuleList()
+        self.n_fcs = len(self.fc_dims)
+        for fc_i in range(self.n_fcs):
+            # Fully connected layer
+            if fc_i == 0:
+                fc = nn.Linear(self.input_dims, self.fc_dims[0])
+            else:
+                fc = nn.Linear(self.fc_dims[fc_i-1], self.fc_dims[fc_i])
+            initWB(fc)
+            self.fcs.append(fc)
+            # Layer Normalization over a mini-batch of inputs
+            ln = nn.LayerNorm(self.fc_dims[fc_i])
+            self.lns.append(ln)
 
-        # self.fc1 = nn.Linear(self.input_dims, self.fc1_dims)
-        # self.fc2 = nn.Linear(self.fc1_dims, fc2_dims)
-        # self.v = nn.Linear(self.fc2_dims, 1)
-        # self.v.weight.data.uniform_(-init_w, init_w)
-        # self.v.bias.data.uniform_(-init_w, init_w)
+        # Output layer
+        self.v = nn.Linear(self.fc_dims[-1], 1)
+        initWB(self.v)
 
         self.optimizer = optim.Adam(self.parameters(), lr=crt_lr)
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
@@ -97,55 +104,55 @@ class ValueNetwork(nn.Module):
         self.to(self.device)
 
     def forward(self, state):
-        # state_value = self.fc1(state)
-        # state_value = F.relu(state_value)
-        # state_value = self.fc2(state_value)
-        # state_value = F.relu(state_value)
-        # v = self.v(state_value)
+        for fc, ln in zip(self.fcs, self.lns):
+            if self.layerNorm:
+                state = F.relu(ln(fc(state)))
+            else:
+                state = F.relu(fc(state))
 
-        v = self.value(state)
+        v = self.v(state)
 
         return v
 
-    def save_checkpoint(self, modelName):
-        T.save(self.state_dict(), self.checkpoint_file + modelName)
+    def save_checkpoint(self):
+        T.save(self.state_dict(), self.model_dir)
 
-    def load_checkpoint(self, modelName):
-        self.load_state_dict(T.load(self.checkpoint_file + modelName))
+    def load_checkpoint(self):
+        self.load_state_dict(T.load(self.model_dir))
 
 
 class ActorNetwork(nn.Module):
-    def __init__(self, act_lr, input_dims, n_actions, max_action,
-                 fc1_dims=256, fc2_dims=256, init_w=3e-3, name='actor', chkpt_dir='tmp/sac'):
+    def __init__(self, act_lr, input_dims, n_actions, max_action, fc_dims, 
+                name='actor', chkpt_dir='tmp/sac', layerNorm=True):
         super(ActorNetwork, self).__init__()
         self.input_dims = input_dims
-        self.fc1_dims = fc1_dims
-        self.fc2_dims = fc2_dims
+        self.fc_dims = fc_dims
         self.n_actions = n_actions
-        self.name = name
-        self.checkpoint_dir = chkpt_dir
-        self.checkpoint_file = os.path.join(self.checkpoint_dir, name+'_')
+        self.model_dir = os.path.join(chkpt_dir, name)
+        self.layerNorm = layerNorm
         self.max_action = max_action
         self.reparam_noise = 1e-6
 
-        self.actor = nn.Sequential(
-            nn.Linear(self.input_dims, self.fc1_dims),
-            nn.ReLU(),
-            nn.Linear(self.fc1_dims, self.fc2_dims),
-            nn.ReLU()
-        )
-        # self.fc1 = nn.Linear(self.input_dims, self.fc1_dims)
-        # self.fc2 = nn.Linear(self.fc1_dims, self.fc2_dims)
-        self.mu = nn.Linear(self.fc2_dims, self.n_actions)
-        self.sigma = nn.Linear(self.fc2_dims, self.n_actions)
+        # Fully connected layers
+        self.fcs = nn.ModuleList()
+        self.lns = nn.ModuleList()
+        self.n_fcs = len(self.fc_dims)
+        for fc_i in range(self.n_fcs):
+            # Fully connected layer
+            if fc_i == 0:
+                fc = nn.Linear(self.input_dims, self.fc_dims[0])
+            else:
+                fc = nn.Linear(self.fc_dims[fc_i-1], self.fc_dims[fc_i])
+            initWB(fc)
+            self.fcs.append(fc)
+            # Layer Normalization over a mini-batch of inputs
+            ln = nn.LayerNorm(self.fc_dims[fc_i])
+            self.lns.append(ln)
 
-        # self.mu.weight.data.uniform_(-init_w, init_w)
-        # self.mu.bias.data.uniform_(-init_w, init_w)
-        # self.sigma.weight.data.uniform_(-init_w, init_w)
-        # self.sigma.bias.data.uniform_(-init_w, init_w)
-        self.actor.apply(weights_init_normal)
-        self.mu.apply(weights_init_normal)
-        self.sigma.apply(weights_init_normal)
+        self.mu = nn.Linear(self.fc_dims[-1], self.n_actions)
+        self.sigma = nn.Linear(self.fc_dims[-1], self.n_actions)
+        initWB(self.mu)
+        initWB(self.sigma)
 
         self.optimizer = optim.Adam(self.parameters(), lr=act_lr)
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
@@ -153,14 +160,14 @@ class ActorNetwork(nn.Module):
         self.to(self.device)
 
     def forward(self, state):
-        # prob = self.fc1(state)
-        # prob = F.relu(prob)
-        # prob = self.fc2(prob)
-        # prob = F.relu(prob)
-        prob = self.actor(state)
+        for fc, ln in zip(self.fcs, self.lns):
+            if self.layerNorm:
+                state = F.relu(ln(fc(state)))
+            else:
+                state = F.relu(fc(state))
 
-        mu = self.mu(prob)
-        sigma = self.sigma(prob)
+        mu = self.mu(state)
+        sigma = self.sigma(state)
 
         # sigma can not be negative
         sigma = T.clamp(sigma, min=self.reparam_noise, max=1)
@@ -197,29 +204,37 @@ class ActorNetwork(nn.Module):
 
 
 class Agent():
-    def __init__(self, input_dims, n_actions,
+    def __init__(self, input_dims, n_actions, layer_sizes, 
                  act_lr=0.00003, crt_lr=0.0003, gamma=0.99, max_size=1000000, tau=0.005,
-                 layer1_size=256, layer2_size=256, batch_size=64, reward_scale=1):
+                 batch_size=64, reward_scale=1,
+                 name='sac', chkpt_dir='tmp/ddpg', layerNorm=True,):
         '''Higher reward scale means higher weights given to rewards ratehr than entropy'''
         self.gamma = gamma
         self.tau = tau
         self.batch_size = batch_size
         self.input_dims = input_dims
         self.n_actions = n_actions
-        # The env action was scaled to [-1, 1],
+        # The env action was scaled to [-1, 1]
         self.max_action = np.ones(self.n_actions)
         # Cannot use env.action_space.high, because env.action_space.high is not real action space
+        self.layer_sizes = layer_sizes
+        self.layerNorm = layerNorm
 
         self.memory = ReplayBuffer(max_size, self.input_dims, self.n_actions)
-        self.actor = ActorNetwork(act_lr, self.input_dims, self.n_actions,
-                                  name='actor', max_action=self.max_action)
-        self.critic_1 = CriticNetwork(crt_lr, self.input_dims, self.n_actions,
-                                      name='critic_1')
-        self.critic_2 = CriticNetwork(crt_lr, self.input_dims, self.n_actions,
-                                      name='critic_2')
-        self.value = ValueNetwork(crt_lr, self.input_dims, name='value')
-        self.target_value = ValueNetwork(
-            crt_lr, self.input_dims, name='target_value')
+
+        self.actor = ActorNetwork(act_lr, self.input_dims, self.n_actions, 
+                                self.max_action, fc_dims=self.layer_sizes, 
+                                name='Actor_'+name, chkpt_dir=chkpt_dir, layerNorm=self.layerNorm)
+
+        self.critic_1 = CriticNetwork(crt_lr, self.input_dims, self.n_actions, self.layer_sizes,
+                                    name='critic1_'+name, chkpt_dir=chkpt_dir, layerNorm=self.layerNorm)
+        self.critic_2 = CriticNetwork(crt_lr, self.input_dims, self.n_actions, self.layer_sizes,
+                                    name='critic2_'+name, chkpt_dir=chkpt_dir, layerNorm=self.layerNorm)
+
+        self.value = ValueNetwork(crt_lr, self.input_dims, self.layer_sizes, 
+                                    name='value_'+name, chkpt_dir=chkpt_dir, layerNorm=self.layerNorm)
+        self.target_value = ValueNetwork(crt_lr, self.input_dims, self.layer_sizes, 
+                                    name='target_value_'+name, chkpt_dir=chkpt_dir, layerNorm=self.layerNorm)
 
         self.scale = reward_scale
         self.update_network_parameters(tau=1)
@@ -243,21 +258,21 @@ class Agent():
 
         self.target_value.load_state_dict(updated_value)
 
-    def save_models(self, modelName):
+    def save_models(self):
         print('.... saving models ....')
-        self.actor.save_checkpoint(modelName)
-        self.value.save_checkpoint(modelName)
-        self.target_value.save_checkpoint(modelName)
-        self.critic_1.save_checkpoint(modelName)
-        self.critic_2.save_checkpoint(modelName)
+        self.actor.save_checkpoint()
+        self.value.save_checkpoint()
+#        self.target_value.save_checkpoint()
+        self.critic_1.save_checkpoint()
+        self.critic_2.save_checkpoint()
 
-    def load_models(self, modelName):
+    def load_models(self):
         print('.... loading models ....')
-        self.actor.load_checkpoint(modelName)
-        self.value.load_checkpoint(modelName)
-        self.target_value.load_checkpoint(modelName)
-        self.critic_1.load_checkpoint(modelName)
-        self.critic_2.load_checkpoint(modelName)
+        self.actor.load_checkpoint()
+        self.value.load_checkpoint()
+#        self.target_value.load_checkpoint()
+        self.critic_1.load_checkpoint()
+        self.critic_2.load_checkpoint()
 
     def learn(self):
         if self.memory.mem_cntr < self.batch_size:

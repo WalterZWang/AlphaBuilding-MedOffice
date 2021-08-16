@@ -19,118 +19,119 @@ import torch.nn as nn
 import torch.optim as optim
 import os
 
-from util import ReplayBuffer, update_single_target_network_parameters, weights_init_normal
+from util import ReplayBuffer, update_single_target_network_parameters, initWB
 
 
 class CriticNetwork(nn.Module):
-    def __init__(self, crt_lr, input_dims, n_actions,
-                 fc1_dims=256, fc2_dims=256, init_w=3e-3,
-                 name='critic', chkpt_dir='tmp/td3'):
+    def __init__(self, crt_lr, input_dims, n_actions, fc_dims, 
+                name='Critic', chkpt_dir='tmp/td3', layerNorm=True):
         super(CriticNetwork, self).__init__()
         self.input_dims = input_dims
-        self.fc1_dims = fc1_dims
-        self.fc2_dims = fc2_dims
         self.n_actions = n_actions
-        self.name = name
-        self.checkpoint_dir = chkpt_dir
-        self.checkpoint_file = os.path.join(self.checkpoint_dir, name+'_')
+        self.fc_dims = fc_dims
+        self.model_dir = os.path.join(chkpt_dir, name)       
+        self.layerNorm = layerNorm
 
-        self.critic = nn.Sequential(
-            nn.Linear(self.input_dims + n_actions, self.fc1_dims),
-            nn.ReLU(),
-            nn.Linear(self.fc1_dims, self.fc2_dims),
-            nn.ReLU(),
-            nn.Linear(self.fc2_dims, 1)
-        )
-        self.critic.apply(weights_init_normal)
-        # self.fc1 = nn.Linear(self.input_dims + n_actions, self.fc1_dims)
-        # self.fc2 = nn.Linear(self.fc1_dims, self.fc2_dims)
-        # self.q = nn.Linear(self.fc2_dims, 1)
-        # self.q.weight.data.uniform_(-init_w, init_w)
-        # self.q.bias.data.uniform_(-init_w, init_w)
+        # Fully connected layers
+        self.fcs = nn.ModuleList()
+        self.lns = nn.ModuleList()
+        self.n_fcs = len(self.fc_dims)
+        for fc_i in range(self.n_fcs):
+            # Fully connected layer
+            if fc_i == 0:
+                fc = nn.Linear(self.input_dims+self.n_actions, self.fc_dims[0])
+            else:
+                fc = nn.Linear(self.fc_dims[fc_i-1], self.fc_dims[fc_i])
+            initWB(fc)
+            self.fcs.append(fc)
+            # Layer Normalization over a mini-batch of inputs
+            ln = nn.LayerNorm(self.fc_dims[fc_i])
+            self.lns.append(ln)
+
+        # Output layer
+        self.q = nn.Linear(self.fc_dims[-1], 1)
+        initWB(self.q)
 
         self.optimizer = optim.Adam(self.parameters(), lr=crt_lr)
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
         self.to(self.device)
 
     def forward(self, state, action):
-        action_value = T.cat([state, action], dim=1)
-        # q_action_value = self.fc1(action_value)
-        # q_action_value = F.relu(q_action_value)
-        # q_action_value = self.fc2(q_action_value)
-        # q_action_value = F.relu(q_action_value)
-        # q = self.q(q_action_value)
+        state_action_value = T.cat([state, action], dim=1)
+        for fc, ln in zip(self.fcs, self.lns):
+            if self.layerNorm:
+                state_action_value = F.relu(ln(fc(state_action_value)))
+            else:
+                state_action_value = F.relu(fc(state_action_value))
 
-        q = self.critic(action_value)
+        q = self.q(state_action_value)
 
         return q
 
-    def save_checkpoint(self, modelName):
-        T.save(self.state_dict(), self.checkpoint_file + modelName)
+    def save_checkpoint(self):
+        T.save(self.state_dict(), self.model_dir)
 
-    def load_checkpoint(self, modelName):
-        self.load_state_dict(T.load(self.checkpoint_file + modelName))
+    def load_checkpoint(self):
+        self.load_state_dict(T.load(self.model_dir))
 
 
 class ActorNetwork(nn.Module):
-    def __init__(self, act_lr, input_dims, n_actions,
-                 fc1_dims=256, fc2_dims=256, init_w=3e-3,
-                 name='actor', chkpt_dir='tmp/td3'):
+    def __init__(self, act_lr, input_dims, n_actions, fc_dims,
+                 name='Actor', chkpt_dir='tmp/td3', layerNorm=True):
         super(ActorNetwork, self).__init__()
         self.input_dims = input_dims
-        self.fc1_dims = fc1_dims
-        self.fc2_dims = fc2_dims
         self.n_actions = n_actions
-        self.name = name
-        self.checkpoint_dir = chkpt_dir
-        self.checkpoint_file = os.path.join(self.checkpoint_dir, name+'_')
+        self.fc_dims = fc_dims
+        self.model_dir = os.path.join(chkpt_dir, name)
+        self.layerNorm = layerNorm
 
-        self.actor = nn.Sequential(
-            nn.Linear(self.input_dims, self.fc1_dims),
-            nn.ReLU(),
-            nn.Linear(self.fc1_dims, self.fc2_dims),
-            nn.ReLU(),
-            nn.Linear(self.fc2_dims, self.n_actions)
-        )
-        self.actor.apply(weights_init_normal)
+        # Fully connected layers
+        self.fcs = nn.ModuleList()
+        self.lns = nn.ModuleList()
+        self.n_fcs = len(self.fc_dims)
+        for fc_i in range(self.n_fcs):
+            # Fully connected layer
+            if fc_i == 0:
+                fc = nn.Linear(self.input_dims, self.fc_dims[0])
+            else:
+                fc = nn.Linear(self.fc_dims[fc_i-1], self.fc_dims[fc_i])
+            initWB(fc)
+            self.fcs.append(fc)
+            # Layer Normalization over a mini-batch of inputs
+            ln = nn.LayerNorm(self.fc_dims[fc_i])
+            self.lns.append(ln)
 
-        # self.fc1 = nn.Linear(self.input_dims, self.fc1_dims)
-        # self.fc2 = nn.Linear(self.fc1_dims, self.fc2_dims)
-        # self.mu = nn.Linear(self.fc2_dims, self.n_actions)
-        # self.mu.weight.data.uniform_(-init_w, init_w)
-        # self.mu.bias.data.uniform_(-init_w, init_w)
+        self.mu = nn.Linear(self.fc_dims[-1], self.n_actions)
+        initWB(self.mu)
 
         self.optimizer = optim.Adam(self.parameters(), lr=act_lr)
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
         self.to(self.device)
 
     def forward(self, state):
-        # prob = self.fc1(state)
-        # prob = F.relu(prob)
-        # prob = self.fc2(prob)
-        # prob = F.relu(prob)
-        # prob = self.mu(prob)
+        for fc, ln in zip(self.fcs, self.lns):
+            if self.layerNorm:
+                state = F.relu(ln(fc(state)))
+            else:
+                state = F.relu(fc(state))
 
-        prob = self.actor(state)
+        x = T.tanh(self.mu(state))
 
-        mu = T.tanh(prob)
+        return x
 
-        return mu
+    def save_checkpoint(self):
+        T.save(self.state_dict(), self.model_dir)
 
-    def save_checkpoint(self, modelName):
-        T.save(self.state_dict(), self.checkpoint_file + modelName)
-
-    def load_checkpoint(self, modelName):
-        self.load_state_dict(T.load(self.checkpoint_file + modelName))
+    def load_checkpoint(self):
+        self.load_state_dict(T.load(self.model_dir))
 
 
 class Agent():
-    def __init__(self, input_dims, n_actions,
-                 act_lr, crt_lr, tau,
-                 gamma=0.99, max_size=1000000, batch_size=64,
-                 layer1_size=256, layer2_size=256,
-                 update_actor_interval=2,
-                 noise=0.1, noise_targetAct=0.2):
+    def __init__(self, input_dims, n_actions,layer_sizes,
+                 act_lr=0.00001, crt_lr=0.0001, tau=0.001, gamma=0.99, 
+                 max_size=1000000, batch_size=64, update_actor_interval=2,
+                 noise=0.1, noise_targetAct=0.2,
+                 chkpt_dir='tmp/td3', name='td3', layerNorm=True):
         self.input_dims = input_dims
         self.n_actions = n_actions
         self.gamma = gamma
@@ -142,20 +143,20 @@ class Agent():
         self.learn_step_cntr = 0
         self.update_actor_iter = update_actor_interval
 
-        self.actor = ActorNetwork(act_lr, self.input_dims, self.n_actions,
-                                  layer1_size, layer2_size, name='actor')
+        self.actor = ActorNetwork(act_lr, self.input_dims, self.n_actions, layer_sizes,
+                                name='Actor_'+name, chkpt_dir=chkpt_dir, layerNorm=layerNorm)
 
-        self.critic_1 = CriticNetwork(crt_lr, self.input_dims, self.n_actions,
-                                      layer1_size, layer2_size, name='critic_1')
-        self.critic_2 = CriticNetwork(crt_lr, self.input_dims, self.n_actions,
-                                      layer1_size, layer2_size, name='critic_2')
+        self.critic_1 = CriticNetwork(crt_lr, self.input_dims, self.n_actions, layer_sizes,
+                                name='Critic1_'+name, chkpt_dir=chkpt_dir, layerNorm=layerNorm)
+        self.critic_2 = CriticNetwork(crt_lr, self.input_dims, self.n_actions, layer_sizes,
+                                name='Critic2_'+name, chkpt_dir=chkpt_dir, layerNorm=layerNorm)
 
-        self.target_actor = ActorNetwork(act_lr, self.input_dims, self.n_actions,
-                                         layer1_size, layer2_size, name='target_actor')
-        self.target_critic_1 = CriticNetwork(crt_lr, self.input_dims, self.n_actions,
-                                             layer1_size, layer2_size, name='target_critic_1')
-        self.target_critic_2 = CriticNetwork(crt_lr, self.input_dims, self.n_actions,
-                                             layer1_size, layer2_size, name='target_critic_2')
+        self.target_actor = ActorNetwork(act_lr, self.input_dims, self.n_actions, layer_sizes,
+                                name='TargetActor_'+name, chkpt_dir=chkpt_dir, layerNorm=layerNorm)
+        self.target_critic_1 = CriticNetwork(crt_lr, self.input_dims, self.n_actions, layer_sizes,
+                                name='TargetCritic1_'+name, chkpt_dir=chkpt_dir, layerNorm=layerNorm)
+        self.target_critic_2 = CriticNetwork(crt_lr, self.input_dims, self.n_actions, layer_sizes,
+                                name='TargetCritic2_'+name, chkpt_dir=chkpt_dir, layerNorm=layerNorm)
 
         self.noise = noise
         self.noise_targetAct = noise_targetAct
@@ -245,20 +246,20 @@ class Agent():
         self.target_critic_1.load_state_dict(updated_critic_1)
         self.target_critic_2.load_state_dict(updated_critic_2)
 
-    def save_models(self, modelName):
+    def save_models(self):
         print('.... saving models ....')
-        self.actor.save_checkpoint(modelName)
-        self.target_actor.save_checkpoint(modelName)
-        self.critic_1.save_checkpoint(modelName)
-        self.critic_2.save_checkpoint(modelName)
-        self.target_critic_1.save_checkpoint(modelName)
-        self.target_critic_2.save_checkpoint(modelName)
+        self.actor.save_checkpoint()
+        # self.target_actor.save_checkpoint()
+        self.critic_1.save_checkpoint()
+        self.critic_2.save_checkpoint()
+        # self.target_critic_1.save_checkpoint()
+        # self.target_critic_2.save_checkpoint()
 
-    def load_models(self, modelName):
+    def load_models(self):
         print('.... loading models ....')
-        self.actor.load_checkpoint(modelName)
-        self.target_actor.load_checkpoint(modelName)
-        self.critic_1.load_checkpoint(modelName)
-        self.critic_2.load_checkpoint(modelName)
-        self.target_critic_1.load_checkpoint(modelName)
-        self.target_critic_2.load_checkpoint(modelName)
+        self.actor.load_checkpoint()
+        # self.target_actor.load_checkpoint()
+        self.critic_1.load_checkpoint()
+        self.critic_2.load_checkpoint()
+        # self.target_critic_1.load_checkpoint()
+        # self.target_critic_2.load_checkpoint()

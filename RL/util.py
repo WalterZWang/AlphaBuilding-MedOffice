@@ -1,6 +1,11 @@
 import numpy as np
 import torch as T
 
+def initWB(fc):
+    initRange = 1./np.sqrt(fc.weight.data.size()[0])
+    T.nn.init.uniform_(fc.weight.data, -initRange, initRange)
+    T.nn.init.uniform_(fc.bias.data, -initRange, initRange)  
+
 class ReplayBuffer():
     def __init__(self, max_size, input_shape, n_actions):
         self.mem_size = max_size
@@ -25,7 +30,7 @@ class ReplayBuffer():
     def sample_buffer(self, batch_size):
         max_mem = min(self.mem_cntr, self.mem_size)
 
-        batch = np.random.choice(max_mem, batch_size)
+        batch = np.random.choice(max_mem, batch_size, replace=False)
 
         states = self.state_memory[batch]
         states_ = self.new_state_memory[batch]
