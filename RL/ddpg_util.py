@@ -85,10 +85,15 @@ class CriticNetwork(nn.Module):
         return q
 
     def save_checkpoint(self):
-        T.save(self.state_dict(), self.model_dir)
+        checkpoint = {'input_size': self.input_dims,
+                      'output_size': self.n_actions,
+                      'hidden_layers': self.fc_dims,
+                      'state_dict': self.state_dict()}
+        T.save(checkpoint, self.model_dir)
 
     def load_checkpoint(self):
-        self.load_state_dict(T.load(self.model_dir))
+        checkpoint = T.load(self.model_dir)
+        self.load_state_dict(checkpoint['state_dict'])
 
 
 class ActorNetwork(nn.Module):
@@ -137,10 +142,16 @@ class ActorNetwork(nn.Module):
         return x
 
     def save_checkpoint(self):
-        T.save(self.state_dict(), self.model_dir)
+        checkpoint = {'input_size': self.input_dims,
+                      'output_size': self.n_actions,
+                      'hidden_layers': self.fc_dims,
+                      'state_dict': self.state_dict()}
+
+        T.save(checkpoint, self.model_dir)
 
     def load_checkpoint(self):
-        self.load_state_dict(T.load(self.model_dir))
+        checkpoint = T.load(self.model_dir)      
+        self.load_state_dict(checkpoint['state_dict'])
 
 class Agent(object):
     def __init__(self, input_dims, n_actions, layer_sizes,

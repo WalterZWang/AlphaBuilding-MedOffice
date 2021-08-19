@@ -40,6 +40,8 @@ def train(vavs, env, seed, result_save_path, exp_name):
             vavs_reward_history.append([])
 
         for episode in range(21):
+            result_all = []
+            
             obs_scaled = env.reset()
             vavs_s_old, _ = vav_obs(obs_scaled, tempSP, ahuSAT, env)
 
@@ -97,6 +99,20 @@ def train(vavs, env, seed, result_save_path, exp_name):
 
                 vavs_s_old = vavs_s_new
 
+                result = np.concatenate(
+                    (env.rescale_state(new_obs), env.rescale_action(acts), comments, np.array([reward])))
+
+                result_all.append(result)
+            
+            # Save the result
+            result_all = pd.DataFrame(result_all)
+            result_all.columns = env.states_time + env.states_amb + env.states_temp + env.action_names + \
+                ['cost_energy', 'cost_comfort', 'temp_min', 'temp_max', 'UDH',
+                    'fanEnergy', 'coolEnergy', 'heatEnergy'] + ['reward']
+
+            result_all.round(decimals=2)
+            result_all.to_csv('log/{}/run{}_trainE{}.csv'.format(exp_name, seed, episode))       
+
             # Determine whether to save the vav controller or not
             for vav_index in range(9):
                 vavs_reward_history[vav_index].append(
@@ -124,7 +140,20 @@ def train(vavs, env, seed, result_save_path, exp_name):
             for vav_index in range(9):
                 writer.add_scalar("VAV{}_reward".format(vav_index), vavs_episode_reward[vav_index], episode)
 
-def test(vavs, env, seed, exp_name):
+def test(algorithm, exp_name, Agent, env, seed):
+
+    # Load the environment
+    filepath = 'tmp/{}/{}/run{}'.format(algorithm, exp_name, seed)
+    vavs = []
+    for vav_idx in range(9):
+        chkp_path = '{}/Actor_vav{}'.format(filepath, vav_idx)
+        checkpoint = T.load(chkp_path)
+        vav = Agent(checkpoint['input_size'],
+                    checkpoint['output_size'],
+                    checkpoint['hidden_layers'],
+                    chkpt_dir=filepath, name='vav{}'.format(vav_idx))
+        Agent.actor.load_state_dict(checkpoint['state_dict'])
+        vavs.append(vav)  
 
     # Test its performance
     result_all = []
@@ -146,7 +175,7 @@ def test(vavs, env, seed, exp_name):
             for i, vav in enumerate(vavs):
                 vav_s = vavs_s[i]
                 vav_s = T.tensor(vav_s, dtype=T.float).to(vav.actor.device)
-                vav_a = vav.actor.forward(vav_s).to(
+                vav_a = vav.actor(vav_s).to(
                     vav.actor.device).detach().numpy()
                 acts.extend(vav_a.tolist())
             acts = np.array(acts)
@@ -187,8 +216,8 @@ if __name__ == "__main__":
 
     ## Parameters to tune ######################
     algorithm = 'ddpg'
-    exp_name = "exp9-test_implementation_ddpg"
-    layer_sizes = [32, 16]
+    exp_name = "exp6-distVAV-largerNetwork-0.05Noise"
+    layer_sizes = [64, 32, 16]
     ############################################
 
     env = medOff_env.MedOffEnv(building_path='gym_AlphaBuilding/fmuModel/v1_fmu.fmu',
@@ -225,4 +254,4 @@ if __name__ == "__main__":
     if args.mode == 'train':
         train(vavs, env, seed, result_save_path, exp_name)
     else:
-        test(vavs, env, seed, exp_name)
+        test(algorithm, exp_name, Agent, env, seed)
