@@ -152,7 +152,7 @@ def test(algorithm, exp_name, Agent, env, seed):
                     checkpoint['output_size'],
                     checkpoint['hidden_layers'],
                     chkpt_dir=filepath, name='vav{}'.format(vav_idx))
-        Agent.actor.load_state_dict(checkpoint['state_dict'])
+        vav.actor.load_state_dict(checkpoint['state_dict'])
         vavs.append(vav)  
 
     # Test its performance
